@@ -39,7 +39,7 @@ ${commentsFormatted}
 
   try {
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-flash-latest',
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: {
@@ -129,7 +129,7 @@ Format the summary exactly like this:
 `;
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
     const result = await model.generateContent(prompt);
     return result.response.text() || 'Failed to generate summary.';
   } catch (error) {
