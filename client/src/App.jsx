@@ -454,6 +454,89 @@ export default function App() {
               )}
             </div>
 
+            {/* ── Why VoxTube Section (What it Solves) ── */}
+            <section className="landing-section fade-up">
+              <h2 className="landing-section-title">Why VoxTube?</h2>
+              <p className="landing-section-subtitle">
+                VoxTube is designed to solve comment fatigue. Instead of wasting hours reading through comments manually, get immediate, structured audience intelligence.
+              </p>
+              
+              <div className="info-grid">
+                <div className="info-card" style={{ '--accent-color': 'var(--cyan)', '--accent-bg': 'rgba(0, 229, 204, 0.08)' }}>
+                  <div className="info-icon-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="20" x2="18" y2="10"></line>
+                      <line x1="12" y1="20" x2="12" y2="4"></line>
+                      <line x1="6" y1="20" x2="6" y2="14"></line>
+                    </svg>
+                  </div>
+                  <h3 className="info-card-title">Instant Sentiment Analysis</h3>
+                  <p className="info-card-desc">
+                    Get an immediate high-level split of Positive, Neutral, and Negative sentiments. Know exactly how your audience feels at a glance.
+                  </p>
+                </div>
+
+                <div className="info-card" style={{ '--accent-color': 'var(--orange)', '--accent-bg': 'rgba(255, 107, 53, 0.08)' }}>
+                  <div className="info-icon-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                  </div>
+                  <h3 className="info-card-title">Noise & Spam Filtering</h3>
+                  <p className="info-card-desc">
+                    Our intelligent classification automatically separates praise, constructive feedback, and actual questions from bot spam and off-topic noise.
+                  </p>
+                </div>
+
+                <div className="info-card" style={{ '--accent-color': 'var(--purple)', '--accent-bg': 'rgba(181, 123, 238, 0.08)' }}>
+                  <div className="info-icon-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="16" y1="13" x2="8" y2="13"></line>
+                      <line x1="16" y1="17" x2="8" y2="17"></line>
+                      <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                  </div>
+                  <h3 className="info-card-title">AI Audience Consensus</h3>
+                  <p className="info-card-desc">
+                    Powered by Google Gemini AI to summarize key takeaways, top critiques, and user suggestions in a clean executive consensus report.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {/* ── How It Works Section ── */}
+            <section className="landing-section fade-up" style={{ marginTop: '3.5rem' }}>
+              <h2 className="landing-section-title">How It Works</h2>
+              <p className="landing-section-subtitle">
+                A seamless, state-of-the-art data pipeline operating under the hood:
+              </p>
+              
+              <div className="steps-container">
+                <div className="step-item">
+                  <span className="step-number">Step 01</span>
+                  <h3 className="step-title">Paste Video URL</h3>
+                  <p className="step-desc">Enter any public YouTube video link in the analyzer bar above to start.</p>
+                </div>
+                <div className="step-item">
+                  <span className="step-number">Step 02</span>
+                  <h3 className="step-title">Fetch Comments</h3>
+                  <p className="step-desc">Our backend streams the latest top comment threads via the YouTube Data API.</p>
+                </div>
+                <div className="step-item">
+                  <span className="step-number">Step 03</span>
+                  <h3 className="step-title">AI Ingestion</h3>
+                  <p className="step-desc">Gemini AI parses, categorizes, and runs sentiment scoring over the batch.</p>
+                </div>
+                <div className="step-item">
+                  <span className="step-number">Step 04</span>
+                  <h3 className="step-title">Explore Insights</h3>
+                  <p className="step-desc">Interact with dynamic recharts, search text filters, and view the AI consensus summary.</p>
+                </div>
+              </div>
+            </section>
+
             {/* ── Quick picks ── */}
             <div style={{ marginTop: '4rem' }}>
               <p className="section-label">or try a quick example</p>
@@ -659,6 +742,16 @@ export default function App() {
             </div>
           </main>
         )}
+
+        <footer className="footer">
+          <span className="footer-text">© {new Date().getFullYear()} VoxTube. All rights reserved.</span>
+          <a href="https://github.com/amanrock1/voxtube" target="_blank" rel="noreferrer" className="footer-link">
+            <svg viewBox="0 0 16 16" fill="currentColor" style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: '6px' }}>
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            Designed & Built by amanrock1
+          </a>
+        </footer>
 
       </div>
     </>
