@@ -281,7 +281,7 @@ export default function App() {
     { id: 'y6120QOlsfU', title: 'Darude – Sandstorm',                     channel: 'Darude',      thumb: 'https://i.ytimg.com/vi/y6120QOlsfU/hqdefault.jpg', url: 'https://www.youtube.com/watch?v=y6120QOlsfU' },
   ];
 
-  const API = 'http://localhost:5001/api';
+  const API = 'https://voxtube-gs6s.onrender.com/api';
 
   // ── Ripple on analyze button ──
   const addRipple = (e) => {
