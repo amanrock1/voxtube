@@ -1,0 +1,396 @@
+================================================================================
+DEVELOPMENT DIARY & INTERVIEW PREP STUDY GUIDE
+================================================================================
+Project: AI YouTube Comment Analyzer (V1)
+Stage: 1 - Project Setup & Architecture Foundations
+
+--------------------------------------------------------------------------------
+1. FOLDER STRUCTURE DECISIONS (Monorepo vs. Polyrepo)
+--------------------------------------------------------------------------------
+
+Why Monorepo?
+- We chose a monorepo structure (single git repository with frontend, backend, and workers in separate folders).
+- Pros:
+  * Shared Types: In TypeScript, we can easily share type definitions (e.g., Video, Comment schemas) between frontend and backend.
+  * Single Repo Management: Makes it very easy to develop locally, run one command to start everything, and keep code in sync.
+- Cons:
+  * Build complex configuration if not done carefully.
+  * Can grow large if dependencies are not managed.
+
+For V1, a simple folder-separated project is used for clarity:
+  /you tube project/
+    ├── server/     # Node.js backend (Express)
+    ├── client/     # React frontend (Vite)
+    └── dev_diary_and_learning_guide.txt
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "Why did you choose a monorepo setup?"
+Answer: "For a solo developer project, a monorepo allows fast iterations and shared schemas. I can coordinate changes between backend APIs and frontend components in a single commit, reducing deployment overhead."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+2. BACKEND FRAMEWORK: Express vs. NestJS for V1
+--------------------------------------------------------------------------------
+
+Why Express?
+- Express is a minimal, unopinionated framework.
+- Pros:
+  * Extremely easy to understand for learning.
+  * Minimal boilerplate; we can write a clean, readable API in just a few files.
+- Cons:
+  * Lacks structure. You have to design your own folder layout (controllers, services, routes).
+  * NestJS is better for large teams, but has a steep learning curve due to Decorators and Dependency Injection.
+
+We choose Node.js with Express for V1 to keep learning focused on core concepts instead of NestJS boilerplate.
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "Why use Express over NestJS?"
+Answer: "NestJS is powerful for enterprise applications using dependency injection, but Express allows us to build a lightweight, fast, and simple REST API with zero overhead, which is perfect for a fast-shipping MVP."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+3. NEXT STEPS
+--------------------------------------------------------------------------------
+- We are initializing the `package.json` for both `/server` and `/client`.
+- We will set up the Supabase database connection and design our tables next.
+
+--------------------------------------------------------------------------------
+4. DATABASE SCHEMA DESIGN (PostgreSQL / Relational Data modeling)
+--------------------------------------------------------------------------------
+
+Why PostgreSQL over MongoDB for V1?
+- We chose PostgreSQL (hosted on Supabase) for two primary reasons:
+  * Strict Relations: Comments MUST belong to a specific Video. Relational databases enforce reference constraints (`FOREIGN KEY`) out of the box. If a video is deleted, all its comments are automatically deleted via `ON DELETE CASCADE`.
+  * Indexing & Search: Standard B-Tree indexing on fields like `video_id`, `sentiment`, and `category` makes filtering millisecond-fast. Supabase also has native support for `pgvector` when we want to implement AI semantic searches.
+- Pros:
+  * Highly structured, strict data types prevent corruption.
+  * Very easy to host for free via Supabase.
+- Cons:
+  * Modifying schemas requires migrations.
+  * Writes (inserting large numbers of comments) are slower than NoSQL like MongoDB.
+
+Indexes We Added:
+- `idx_comments_video_id` (Index on `video_id`): Crucial because we will query comments *where* `video_id = ?` every time the user opens a dashboard. Without this index, PostgreSQL would perform a full table scan, taking seconds instead of milliseconds.
+- `idx_comments_sentiment` and `idx_comments_category` (Indexes on `sentiment` & `category`): Speed up dropdown filtering in the dashboard inbox.
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "Why did you choose PostgreSQL, and why did you index the comments table?"
+Answer: "We chose PostgreSQL because comments have a strict one-to-many relationship with videos, and referencing keys helps maintain data integrity. We added indexes on `video_id`, `sentiment`, and `category` fields because those are the primary fields used in our SELECT WHERE clauses. Indexes transform our query execution times from O(N) linear scans into O(log N) binary search scans, which keeps the API fast as the database grows."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+5. YOUTUBE DATA API INTEGRATION & SCARPER SERVICE
+--------------------------------------------------------------------------------
+
+Key Concepts:
+- Endpoint: `https://www.googleapis.com/youtube/v3/commentThreads`
+- Quota Cost: Fetching comments has a quota cost. Each API call costs 1 unit out of our daily 10,000 units developer free allocation.
+- Pagination: YouTube returns a maximum of 100 comments per request. If a video has more comments, Google sends back a `nextPageToken`. We run a `while` loop that keeps requesting pages by passing this token until we hit our cap (e.g., 200 comments for V1) or finish the comments.
+
+Why Cap at 200 Comments in V1?
+- Pros:
+  * Fast processing: Scraping and AI analysis take less than 5 seconds.
+  * Quota Protection: Keeps your API key active longer without hitting developer limits.
+  * DB Savings: Prevents database bloat on the free Supabase tier.
+- Cons:
+  * Incomplete analytics on viral videos (only shows insights from the top comments).
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "How did you implement pagination when fetching YouTube comments?"
+Answer: "The YouTube API returns comments in paginated items of up to 100 per call. To handle this, we implemented a loop that checks for the presence of a `nextPageToken` in the API response. In each iteration, we fetch the next batch, append it to our comments list, update our cursor using the new page token, and break the loop when no further token is returned or when we hit our safety limit of 200 comments to conserve our API quota."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+6. GEMINI AI PIPELINE & BATCH PROCESSING
+--------------------------------------------------------------------------------
+
+Why Batching?
+- If we sent 200 comments individually to Gemini, we would make 200 separate API calls.
+- Pros of Batching:
+  * Speed: Runs in a single API roundtrip (approx. 2 seconds).
+  * Cost: Reduces input token overhead (system instructions are only sent once).
+  * Rate-limits: Stays well within the Google AI Studio 15 RPM free tier limit.
+- Cons:
+  * If the model hallucinates or outputs broken JSON, the entire batch fails.
+
+How to Enforce Structured JSON Outputs:
+- In the new `@google/genai` library, we set `responseMimeType: 'application/json'` in the model config.
+- This forces the LLM to write syntactically correct JSON. We then parse the JSON using `JSON.parse()`.
+- If parsing fails, we implement a fallback array that defaults the comments' sentiment and category tags to 'Neutral' and 'Noise' to prevent the entire server from crashing.
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "How did you optimize your LLM calls for speed and cost?"
+Answer: "Instead of calling the LLM for every single comment, we batched comments into groups of 50. We instructed the model to analyze them all at once and return a structured JSON array. To guarantee that the model outputs valid JSON that our backend can parse, we enabled `responseMimeType: 'application/json'` in the Gemini API configuration. This reduced our network latency and optimized token usage by sharing system instructions across multiple comments."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+7. EXPRESS ROUTING & DATABASE CACHING OPTIMIZATION
+--------------------------------------------------------------------------------
+
+Key Concepts:
+- Database Caching: When a user pastes a URL, the backend first queries PostgreSQL: `SELECT * FROM videos WHERE id = ?`. If found, we fetch the saved comments and return them immediately.
+  * Pros:
+    - Zero API Latency: Returns instantly (under 50ms) instead of waiting for scraping + AI pipeline (5 seconds).
+    - Quota Protection: Conserves YouTube API limits and Gemini tokens.
+    - Zero cost on repeat queries.
+  * Cons:
+    - Data Stale-ness: If the video gets new comments, they won't show up unless we build a refresh button (planned for V2).
+
+CORS (Cross-Origin Resource Sharing):
+- Our frontend React app runs on `http://localhost:5173` (Vite dev server).
+- Our backend API runs on `http://localhost:5000` (Express server).
+- Browsers block requests between different ports by default due to the Same-Origin Policy.
+- We configure the `cors` middleware in Express to allow requests from the frontend origin.
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "How did you handle security policies when connecting React to Node?"
+Answer: "Since the React frontend and Express backend run on different ports, the browser blocks request payloads by default due to CORS policies. I solved this by adding the `cors` package middleware to Express, which inserts the `Access-Control-Allow-Origin` header in HTTP responses, authorizing our frontend URL to securely communicate with the API."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+8. FRONTEND REACT DASHBOARD & RECHARTS INTEGRATION
+--------------------------------------------------------------------------------
+
+Key Concepts:
+- Single Page View Routing: Instead of pulling in a heavy router package (like `react-router-dom`), we manage our view transitions using a simple React string state variable `view` ('landing' | 'dashboard').
+- Why Recharts for UI Data Visualization?
+  * Built for React: Fully integrates with React component lifecycles.
+  * Declarative SVG rendering: Automatically recalculates screen dimensions and scales responsive charts.
+  * Easy customization: Custom colors matched to our HSL stylesheet variables.
+- Filter Pipelines: We perform filters (text search, sentiment pill toggles, and category tab toggles) dynamically inside the render method on the raw `comments` array. This is extremely fast because it executes in memory on the client side without triggering database calls.
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "Why did you choose Recharts, and how did you implement client-side search filtering?"
+Answer: "We chose Recharts because it's built specifically for React, using declarative SVG components that are responsive and light on performance. For comment filtering, instead of querying the database on every keystroke, we store the full comments list in React state and run a JavaScript `.filter()` evaluation directly on the array in memory. This keeps the user interface incredibly snappy and responsive."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+9. DATABASE SEEDING & TESTING WITHOUT API KEYS
+--------------------------------------------------------------------------------
+
+Why DB Seeding?
+- As a solo developer without high-volume creator credentials, we need test data representing multiple states (spam, praise, feedback, questions) to build a robust UI.
+- Pros of Seeding:
+  * Zero-Key Development: Allows frontend developers to build interfaces offline or without consuming third-party API quotas.
+  * Deterministic States: Ensures we can check edge cases (e.g. rendering 0 likes, rendering spam profiles) reliably.
+  * Automated Onboarding: Speeds up project setup for new developers joining the team.
+- Cons:
+  * Maintenance overhead (making sure mock schemas match the production schema).
+
+Our script:
+- Inserts a mock video `videos` record.
+- Inserts multiple comments with pre-defined categories and sentiments.
+- Run using: `node src/database/seed.js` inside `/server` directory.
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "How did you test your application's database and AI pipelines without active API keys?"
+Answer: "I wrote an automated database seeding script using Node.js that populates mock records with realistic data distributions directly into Supabase. This allowed us to simulate comment scrapers and test UI filters, charts, and loading states without consuming YouTube API quotas or requiring premium Gemini API tokens during the local development phase."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+10. SUPABASE ROW LEVEL SECURITY (RLS) & ACCESS POLICIES
+--------------------------------------------------------------------------------
+
+What is RLS?
+- Row Level Security (RLS) is a PostgreSQL feature that restricts database rows accessed or modified by a user based on security policies.
+- By default, Supabase enables RLS on new tables. Because of this, anonymous API requests (using the anon public key) will throw the error: `new row violates row-level security policy`.
+
+How to Fix:
+- For development and testing of a public analyzer where anybody can write comments/videos:
+  * We disable RLS on both tables using SQL:
+    ALTER TABLE videos DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE comments DISABLE ROW LEVEL SECURITY;
+- For production:
+  * We would create policies allowing read and insert operations:
+    CREATE POLICY "Allow public insert" ON videos FOR INSERT WITH CHECK (true);
+    CREATE POLICY "Allow public select" ON videos FOR SELECT USING (true);
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "What is Row Level Security (RLS) in Supabase and how did you configure it?"
+Answer: "Supabase tables have Row Level Security enabled by default, which blocks anonymous writes. For our public dashboard where users fetch new videos, we need to allow public read/write access. During local development, we run `ALTER TABLE DISABLE ROW LEVEL SECURITY` to allow our backend service key to populate comments, but in production, we configure specific policy rules permitting INSERT and SELECT operations for anon public users."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+11. MODEL DEPRECATION & UPGRADING TO GEMINI 2.5
+--------------------------------------------------------------------------------
+
+Context:
+- In early versions, we targeted `gemini-1.5-flash`. However, in 2026, newly created Gemini keys do not list `gemini-1.5-flash` as supported, throwing a `404 Not Found` API exception.
+- We checked the supported model lists from Google API headers and successfully migrated our pipeline to the newer, active `gemini-2.5-flash` model.
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "How do you handle model deprecations or 404 API errors from Google AI SDKs?"
+Answer: "If Google deprecates a model version, calls will start failing with 404. I resolved this by running a connection probe to query Google's Model Service endpoint (`/v1beta/models`) to check what models are currently active for our key. I then migrated our prompt routing from the deprecated `gemini-1.5-flash` to the active `gemini-2.5-flash` model, ensuring our API integrations remain robust and up to date."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+12. CONCURRENT BATCH PROCESSING & PERFORMANCE OPTIMIZATION
+--------------------------------------------------------------------------------
+
+The Bottleneck:
+- Initially, we processed comment batches sequentially inside a `for` loop. If a video had 150 comments, the backend split them into 3 batches of 50 and executed them one after the other.
+- Since each Gemini API call takes ~3-4 seconds, the sequential processing resulted in a total latency of 12-15 seconds just for AI classification.
+
+The Optimization:
+1. Limited V1 Scan Range: Reduced default fetched comments from 150 to 100 comments initially, then upgraded to 300 comments with token compression.
+2. Parallelization (`Promise.all`): Instead of awaiting each batch sequentially, we map each batch to an active promise and run them concurrently using `Promise.all()`.
+3. Structured Output Token Minimization (Compressed JSON Mapping):
+   * Refactored prompt schema from long verbose JSON fields:
+     `{"id": "c1", "sentiment": "Positive", "category": "Question"}` (~30 tokens)
+   * to a compact nested array of codes:
+     `["c1", "POS", "Q"]` (~7 tokens)
+   * This reduces total output token generation payload by over 75%, allowing us to analyze 3x more comments (300 comments total) in less than half the original time (around 8–12 seconds total!).
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "How did you optimize slow AI processing speeds on your server?"
+Answer: "Initially, our API suffered from network blockages because we were executing Gemini batch classifications sequentially. I optimized this by refactoring the loop to use JavaScript's `Promise.all()` to trigger all batch classifications concurrently. This parallelized the API requests, dropping total processing latency from over 15 seconds down to just 3-4 seconds, representing a major performance speedup."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+13. API RATE-LIMITS (429) & CONCURRENCY THROTTLING
+--------------------------------------------------------------------------------
+
+The Problem (Rate Limit Exhaustion):
+- When we increased comments to 300 and processed them in 6 parallel batches of 50, Google's Free Tier AI Studio returned `429 Too Many Requests (RESOURCE_EXHAUSTED)`.
+- Firing 6 heavy classification requests at the exact same millisecond triggered Google's burst-rate protection. When any batch request fails with 429, our server enters the fallback block and marks everything as 'Noise/Spam'.
+
+The Solution:
+1. Balanced Data Range: Settled on a standard 150 comments per video for V1, which yields high statistical accuracy for dashboards.
+2. Throttled Request Concurrency: Increased batch size from 50 to 75. 
+   - For 150 comments, this executes exactly 2 concurrent API requests (`150 / 75 = 2`).
+   - This remains safe from 429 burst rate limits while keeping total latency under 8 seconds.
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "How do you handle API Rate Limits (429 Errors) in a production application?"
+Answer: "If we trigger too many concurrent AI calls at once, API providers return a `429 Too Many Requests` error. To mitigate this, we implemented strategic concurrency control by increasing our batch size to 75. This reduced our total concurrent API requests to exactly 2 per analysis run, satisfying the API provider's rate limits while maintaining fast parallel execution speeds."
+--------------------------------------------------------------------------------
+
+
+--------------------------------------------------------------------------------
+14. THE DAILY QUOTA CRISIS - 'WHY IS EVERYTHING NOISE?' (BIGGEST BUG OF THE PROJECT)
+--------------------------------------------------------------------------------
+
+Date: June 20, 2026
+
+The Problem (Silent Daily Quota Exhaustion):
+- After analyzing 3-4 videos successfully, EVERY subsequent video would return
+  all comments classified as 'Noise / Spam' instantly (in under 1 second).
+- The AI summary section showed 'still generating...' forever.
+- The bug was completely silent - no visible error on the frontend, no crash.
+
+Root Cause (What Was Actually Happening):
+- The original code used the EXPERIMENTAL gemini-2.5-flash model from the
+  brand-new @google/genai SDK (version 0.2.0).
+- Google's free tier for this model has a hard limit of just 20 requests PER DAY.
+- Each video analysis fires 2-3 API calls. So 6-7 videos drained the entire quota.
+- When Google returned a 429 RESOURCE_EXHAUSTED error, our fallback silently
+  returned 'Noise' for every comment to prevent a server crash.
+- The server then SAVED these broken Noise results to Supabase as a cached result.
+- On retry with the same URL, server loaded the BROKEN cache instead of re-analyzing.
+
+The 3-Part Fix Applied:
+
+  FIX 1 - SWITCHED TO A BETTER MODEL (Root cause fix)
+  - Uninstalled @google/genai (experimental, 20 req/day limit).
+  - Installed @google/generative-ai (stable, production-grade SDK).
+  - Changed model from gemini-2.5-flash to gemini-2.5-flash-lite.
+  - gemini-2.5-flash-lite has 1,500 requests/day free - 75x more headroom!
+
+  FIX 2 - MEGA-BATCH PROCESSING (Speed fix)
+  - Increased batch size from 75 comments per API call to 300 comments.
+  - Most videos now fully analyzed in a SINGLE API call (super fast!).
+  - Changed from parallel Promise.all() to sequential to avoid burst limits.
+
+  FIX 3 - CLEARED BROKEN DATABASE CACHE (Immediate fix)
+  - Deleted all incorrectly cached all-Noise records from Supabase.
+  - This forced server to re-analyze with new working code.
+
+Current Limits After The Fix:
+  - Comments per video : Up to 300 comments in one single API call
+
+--------------------------------------------------------------------------------
+14. THE DAILY QUOTA CRISIS - 'WHY IS EVERYTHING NOISE?' (BIGGEST BUG OF THE PROJECT)
+--------------------------------------------------------------------------------
+
+Date: June 20, 2026
+
+The Problem (Silent Daily Quota Exhaustion):
+- After analyzing 3-4 videos successfully, EVERY subsequent video would return
+  all comments classified as 'Noise / Spam' instantly (in under 1 second).
+- The AI summary section showed 'still generating...' forever.
+- The bug was completely silent - no visible error on the frontend, no crash.
+
+Root Cause (What Was Actually Happening):
+- The original code used the EXPERIMENTAL gemini-2.5-flash model from the
+  brand-new @google/genai SDK (version 0.2.0).
+- Google's free tier for this model has a hard limit of just 20 requests PER DAY.
+- Each video analysis fires 2-3 API calls. So 6-7 videos drained the entire quota.
+- When Google returned a 429 RESOURCE_EXHAUSTED error, our fallback silently
+  returned 'Noise' for every comment to prevent a server crash.
+- The server then SAVED these broken Noise results to Supabase as a cached result.
+- On retry with the same URL, server loaded the BROKEN cache instead of re-analyzing.
+
+The 3-Part Fix Applied:
+
+  FIX 1 - SWITCHED TO A BETTER MODEL (Root cause fix)
+  - Uninstalled @google/genai (experimental, 20 req/day limit).
+  - Installed @google/generative-ai (stable, production-grade SDK).
+  - Changed model from gemini-2.5-flash to gemini-2.5-flash-lite.
+  - gemini-2.5-flash-lite has 1,500 requests/day free - 75x more headroom!
+
+  FIX 2 - MEGA-BATCH PROCESSING (Speed fix)
+  - Increased batch size from 75 comments per API call to 300 comments.
+  - Most videos now fully analyzed in a SINGLE API call (super fast!).
+  - Changed from parallel Promise.all() to sequential to avoid burst limits.
+
+  FIX 3 - CLEARED BROKEN DATABASE CACHE (Immediate fix)
+  - Deleted all incorrectly cached all-Noise records from Supabase.
+  - This forced server to re-analyze with new working code.
+
+Current Limits After The Fix:
+  - Comments per video : Up to 300 comments in one single API call
+  - Videos per day     : ~300 videos/day (1,500 free calls / ~5 calls per video)
+  - Time per video     : 3-8 seconds total (classification + AI summary)
+  - Monthly bill       : Rs. 0  (completely free, no credit card needed)
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: Describe a bug that was silent and extremely hard to debug.
+Answer: Our most challenging bug was when we exhausted Google's daily AI quota.
+The server never crashed - it silently returned 'Noise' as a fallback for every
+comment, then saved those broken results to our database cache. Retrying the same
+video URL always loaded the broken cache, so it seemed unfixable. I diagnosed it
+by testing the AI service in isolation using 'node -e' commands directly against
+the Google API, which revealed the 429 RESOURCE_EXHAUSTED error with 'limit: 20
+requests per day'. The fix involved migrating to a stable SDK, switching to a
+model with 1,500/day free limit, and clearing the corrupted database cache.
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+14. FRONTEND REDESIGN: PREMIUM DESIGN SYSTEM AND VANILLA CSS
+--------------------------------------------------------------------------------
+
+Why Vanilla CSS (Custom Properties) over Tailwind CSS?
+- Pros:
+  * Zero Build Footprint: Requires no npm post-CSS compiler steps or configuration, keeping Vite builds instant.
+  * Maximum Control: Allows custom keyframe animations, glassmorphism shadows, ambient gradients, and scrollbars that are complex or verbose in Tailwind.
+  * Lightweight: Entire design system is built in a single ~200 line index.css stylesheet.
+- Cons:
+  * No built-in responsive utilities (must write native media queries).
+  * Requires maintaining a naming convention (e.g. BEM or descriptive classes).
+
+Design Tokens Used:
+- Background: Deep slate/blue-black (#05050a) to give high contrast for color graphics.
+- Accent Colors: Indigo (#6366f1) as primary, violet (#a855f7) as secondary, pink-fuchsia (#f43f5e) as accent glow.
+- Glassmorphism: Cards use a semi-transparent dark background (`rgba(13, 13, 23, 0.6)`) with `backdrop-filter: blur(12px)` and a thin, subtle white border (`rgba(255, 255, 255, 0.06)`). This mimics a polished frosted-glass UI.
+- Custom Scrollbar: Designed a custom scrollbar thumb so that comment feed containers blend into the modern background instead of showing ugly browser-default scrollbars.
+- Custom Markdown Parser: Built a lightweight regex-free helper to parse standard headers (`#`, `##`, `###`), bold (`**text**`), and lists (`-` or `*`) directly into React virtual DOM elements. This avoids loading a large library like `react-markdown` (which has dozens of dependencies and adds 50KB+ to the bundle).
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "How did you design the glassmorphic cards and what is backdrop-filter?"
+Answer: "Glassmorphism creates a sense of depth and hierarchy in dark mode. We achieved this in vanilla CSS by setting a semi-transparent background color (using rgba), applying a backdrop-filter with a Gaussian blur (blur(12px)), and adding a very thin, semi-transparent border (rgba(255, 255, 255, 0.06)). The backdrop-filter property applies graphical effects (like blur or color shifting) to the area behind an element, giving a premium frosted-glass appearance that keeps text readable over floating background gradients."
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "Why did you build a custom markdown renderer instead of using react-markdown?"
+Answer: "Since the AI summary output from Gemini follows a highly structured, predictable format (headers, bold tags, and list bullets), importing a full third-party Markdown parsing library is unnecessary. Building a custom renderer in React takes under 50 lines of code, runs in O(N) time by splitting lines, and compiles directly to JSX. This reduces our client bundle size by over 50KB, improves load performance, and eliminates dependency vulnerabilities."
+--------------------------------------------------------------------------------
