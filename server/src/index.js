@@ -43,17 +43,29 @@ app.post('/api/analyze', async (req, res) => {
       .single();
 
     if (existingVideo) {
-      // Fetch associated comments
-      const { data: existingComments } = await supabase
-        .from('comments')
-        .select('*')
-        .eq('video_id', videoId);
+      // Check if this video has a failed/fallback summary from a previous run
+      const isFailedSummary = !existingVideo.summary || 
+        existingVideo.summary.includes('Error generating') || 
+        existingVideo.summary.includes('Failed to generate summary');
 
-      return res.json({
-        cached: true,
-        video: existingVideo,
-        comments: existingComments || []
-      });
+      if (isFailedSummary) {
+        console.log(`Failed summary detected for video ${videoId}. Auto-healing cache...`);
+        // Delete stale records to allow a fresh analysis
+        await supabase.from('comments').delete().eq('video_id', videoId);
+        await supabase.from('videos').delete().eq('id', videoId);
+      } else {
+        // Fetch associated comments
+        const { data: existingComments } = await supabase
+          .from('comments')
+          .select('*')
+          .eq('video_id', videoId);
+
+        return res.json({
+          cached: true,
+          video: existingVideo,
+          comments: existingComments || []
+        });
+      }
     }
 
     // 2. Fetch video details from YouTube API
@@ -64,11 +76,20 @@ app.post('/api/analyze', async (req, res) => {
     console.log(`Fetching comments for video ${videoId}...`);
     const commentsList = await fetchComments(videoId, 300); // fetch up to 300 comments (matches AI batch size)
 
-    if (commentsList.length === 0) {
+    // Deduplicate comments by ID to prevent unique constraint violations
+    const uniqueCommentsMap = new Map();
+    commentsList.forEach(comment => {
+      if (comment.id) {
+        uniqueCommentsMap.set(comment.id, comment);
+      }
+    });
+    const uniqueCommentsList = Array.from(uniqueCommentsMap.values());
+
+    if (uniqueCommentsList.length === 0) {
       // Create empty record for videos with no comments
       const { error: insErr } = await supabase
         .from('videos')
-        .insert([{ ...videoDetails, summary: 'This video has no comments to analyze.' }]);
+        .upsert([{ ...videoDetails, summary: 'This video has no comments to analyze.' }]);
         
       if (insErr) throw insErr;
       
@@ -80,12 +101,12 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     // 4. Batch classify comments sequentially with Gemini (rate limit optimization)
-    console.log(`Classifying ${commentsList.length} comments sequentially...`);
+    console.log(`Classifying ${uniqueCommentsList.length} comments sequentially...`);
     const batchSize = 300; // Increased to 300 to process everything in a single API call (prevents 429 Too Many Requests)
     const batches = [];
 
-    for (let i = 0; i < commentsList.length; i += batchSize) {
-      batches.push(commentsList.slice(i, i + batchSize));
+    for (let i = 0; i < uniqueCommentsList.length; i += batchSize) {
+      batches.push(uniqueCommentsList.slice(i, i + batchSize));
     }
 
     // Process sequentially to avoid 429 Too Many Requests on free tier
@@ -100,7 +121,7 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     // Map AI results back to comments
-    const analyzedComments = commentsList.map(comment => {
+    const analyzedComments = uniqueCommentsList.map(comment => {
       const classification = classifiedResults.find(r => r.id === comment.id);
       return {
         ...comment,
@@ -114,17 +135,17 @@ app.post('/api/analyze', async (req, res) => {
     const videoSummary = await generateVideoSummary(analyzedComments);
     videoDetails.summary = videoSummary;
 
-    // 6. Save results to database (Supabase)
+    // 6. Save results to database (Supabase) using upsert to avoid duplicate key issues
     console.log('Writing records to Supabase...');
     const { error: videoInsErr } = await supabase
       .from('videos')
-      .insert([videoDetails]);
+      .upsert([videoDetails]);
 
     if (videoInsErr) throw videoInsErr;
 
     const { error: commentsInsErr } = await supabase
       .from('comments')
-      .insert(analyzedComments);
+      .upsert(analyzedComments);
 
     if (commentsInsErr) throw commentsInsErr;
 
