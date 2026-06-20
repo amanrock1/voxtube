@@ -43,23 +43,27 @@ app.post('/api/analyze', async (req, res) => {
       .single();
 
     if (existingVideo) {
+      // Fetch associated comments to verify cache integrity
+      const { data: existingComments } = await supabase
+        .from('comments')
+        .select('*')
+        .eq('video_id', videoId);
+
       // Check if this video has a failed/fallback summary from a previous run
       const isFailedSummary = !existingVideo.summary || 
         existingVideo.summary.includes('Error generating') || 
         existingVideo.summary.includes('Failed to generate summary');
 
-      if (isFailedSummary) {
-        console.log(`Failed summary detected for video ${videoId}. Auto-healing cache...`);
+      // Check if the video has a summary indicating there should be comments, but no comments are stored in the database
+      const isMissingComments = (!existingComments || existingComments.length === 0) &&
+        existingVideo.summary !== 'This video has no comments to analyze.';
+
+      if (isFailedSummary || isMissingComments) {
+        console.log(`Corrupted cache detected for video ${videoId} (isFailedSummary: ${isFailedSummary}, isMissingComments: ${isMissingComments}). Auto-healing cache...`);
         // Delete stale records to allow a fresh analysis
         await supabase.from('comments').delete().eq('video_id', videoId);
         await supabase.from('videos').delete().eq('id', videoId);
       } else {
-        // Fetch associated comments
-        const { data: existingComments } = await supabase
-          .from('comments')
-          .select('*')
-          .eq('video_id', videoId);
-
         return res.json({
           cached: true,
           video: existingVideo,
