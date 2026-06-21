@@ -45,6 +45,7 @@ app.use(helmet());
 const allowedOrigins = [
   'http://localhost:5173',   // Vite dev server
   'http://localhost:3000',   // Alternative dev port
+  'https://voxtube-aman.vercel.app', // Production frontend
   process.env.FRONTEND_URL  // Production URL (set in .env when deployed)
 ].filter(Boolean); // Remove undefined entries
 
