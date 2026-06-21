@@ -391,10 +391,6 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div className="nav-live">
-              <span className="nav-live-dot" />
-              live
-            </div>
             {view === 'dashboard' && (
               <button className="back-btn" onClick={reset}>
                 <IC.Back /> Back
@@ -421,11 +417,6 @@ export default function App() {
         {!loading && view === 'landing' && (
           <main>
             <div className="hero fade-up">
-              <div className="hero-eyebrow">
-                <span className="hero-eyebrow-dot" />
-                AI-powered comment analysis
-              </div>
-
               <h1 className="hero-title">
                 Read every comment.<br />
                 Understand the{' '}
