@@ -281,7 +281,14 @@ export default function App() {
     { id: 'y6120QOlsfU', title: 'Darude – Sandstorm',                     channel: 'Darude',      thumb: 'https://i.ytimg.com/vi/y6120QOlsfU/hqdefault.jpg', url: 'https://www.youtube.com/watch?v=y6120QOlsfU' },
   ];
 
-  const API = 'https://voxtube-gs6s.onrender.com/api';
+  const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:5001/api'
+    : 'https://voxtube-gs6s.onrender.com/api';
+
+  // ─── SECURITY: Read shared secret from env — never hardcode this in source code ─────
+  // The server validates this header on every request to prevent API abuse.
+  // Set VITE_API_KEY in client/.env (matches CLIENT_API_KEY in server/.env)
+  const API_KEY = import.meta.env.VITE_API_KEY || '';
 
   // ── Ripple on analyze button ──
   const addRipple = (e) => {
@@ -298,10 +305,10 @@ export default function App() {
   const analyze = async (videoUrl) => {
     if (!videoUrl.trim()) return;
     setLoading(true); setError('');
-    setStep('Connecting to YouTube API…');
+    setStep('Connecting to platform API…');
     const steps = [
-      'Fetching top comment threads…',
-      'Packaging 300 comments for Gemini…',
+      'Fetching comment threads…',
+      'Packaging comments for Gemini…',
       'AI classifying sentiment…',
       'Categorising topics & intent…',
       'Building audience summary…',
@@ -311,7 +318,7 @@ export default function App() {
     try {
       const res = await fetch(`${API}/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
         body: JSON.stringify({ url: videoUrl }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Analysis failed'); }
@@ -405,7 +412,7 @@ export default function App() {
               <div className="loading-step" style={{ marginTop: '0.5rem' }}>{loadingStep}</div>
             </div>
             <div className="loading-note">
-              Gemini processes up to 300 comments in a single batch — results land in ~30 seconds.
+              Gemini processes comments in batch mode — results land in a few seconds.
             </div>
           </div>
         )}
@@ -426,7 +433,7 @@ export default function App() {
               </h1>
 
               <p className="hero-subtitle">
-                Paste a YouTube link. We pull 300 top comments, run them through Gemini AI, and hand you back a clean sentiment breakdown — in seconds.
+                Paste a YouTube video or Reddit post link. We fetch the comment threads, analyze them with Gemini AI, and show you clean, actionable insights in seconds.
               </p>
 
               <div className="search-wrap">
@@ -434,7 +441,7 @@ export default function App() {
                 <input
                   className="search-input"
                   type="text"
-                  placeholder="youtube.com/watch?v=…"
+                  placeholder="Paste YouTube video or Reddit post URL..."
                   value={url}
                   onChange={e => setUrl(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && analyze(url)}
@@ -562,9 +569,15 @@ export default function App() {
                 <div className="video-channel">
                   <span>{videoData.channel_title}</span>
                   <span style={{ color: 'var(--text-3)' }}>·</span>
-                  <a href={`https://youtube.com/watch?v=${videoData.id}`} target="_blank" rel="noreferrer">
-                    Watch on YouTube <IC.Ext />
-                  </a>
+                  {videoData.id.startsWith('reddit_') ? (
+                    <a href={`https://www.reddit.com/comments/${videoData.id.replace('reddit_', '')}`} target="_blank" rel="noreferrer">
+                      Open on Reddit <IC.Ext />
+                    </a>
+                  ) : (
+                    <a href={`https://youtube.com/watch?v=${videoData.id}`} target="_blank" rel="noreferrer">
+                      Watch on YouTube <IC.Ext />
+                    </a>
+                  )}
                 </div>
               </div>
             </div>

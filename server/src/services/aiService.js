@@ -21,8 +21,12 @@ async function classifyCommentsBatch(comments, retries = 3) {
   }
   if (!comments || comments.length === 0) return [];
 
-  // Format comments into a clear list for the prompt
-  const commentsFormatted = comments.map(c => `ID: ${c.id}\nText: ${c.text}`).join('\n---\n');
+  // \u2500\u2500\u2500 SECURITY: Truncate text to prevent prompt injection attacks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  // A malicious Reddit/YouTube comment like "Ignore all previous instructions..."
+  // could try to hijack the AI. Capping text length limits the attack surface.
+  const MAX_COMMENT_CHARS = 1000;
+  const commentsFormatted = comments.map(c => `ID: ${c.id}\nText: ${String(c.text || '').slice(0, MAX_COMMENT_CHARS)}`).join('\n---\n');
+
 
   const prompt = `
 You are an expert NLP classifier. You will categorize YouTube comments and perform sentiment analysis.
@@ -138,7 +142,85 @@ Format the summary exactly like this:
   }
 }
 
+/**
+ * Generate a high-level troubleshooting and solution summary of Reddit comments
+ * @param {string} postTitle - The Reddit post title (problem description)
+ * @param {Array} comments - Flattened comments array with parent_id relationships
+ * @returns {Promise<string>} - Markdown summary
+ */
+async function generateRedditSummary(postTitle, comments) {
+  if (!genAI) {
+    throw new Error('Gemini AI client is not initialized due to missing API Key.');
+  }
+  if (!comments || comments.length === 0) {
+    return 'No solutions or advice available in comments.';
+  }
+
+  // 1. Build a text-based hierarchy of comments to help the AI understand replies
+  const commentMap = new Map();
+  comments.forEach(c => commentMap.set(c.id, { ...c, replies: [] }));
+  
+  const rootComments = [];
+  comments.forEach(c => {
+    const mapped = commentMap.get(c.id);
+    if (c.parent_id && commentMap.has(c.parent_id)) {
+      commentMap.get(c.parent_id).replies.push(mapped);
+    } else {
+      rootComments.push(mapped);
+    }
+  });
+
+  // Limit to top 50 threads to prevent token bloating
+  const serializedThreads = rootComments.slice(0, 50).map(root => {
+    let threadStr = `- [Solution/Advice] (Score: ${root.like_count}): ${root.text}\n`;
+    if (root.replies.length > 0) {
+      root.replies.forEach(reply => {
+        threadStr += `  ↳ [Community Reply] (Score: ${reply.like_count}): ${reply.text}\n`;
+      });
+    }
+    return threadStr;
+  }).join('\n---\n');
+
+  const prompt = `
+You are an expert Troubleshooting Analyst. You are analyzing a Reddit post discussing a technical problem or query.
+Post Title/Question: "${postTitle}"
+
+Review the following comment threads (solutions and community feedback replies indicating if they worked, caused issues, or failed):
+
+${serializedThreads}
+
+Generate a clear, structured troubleshooting summary in Markdown. Be concise and follow this exact format:
+
+### 🛠️ Extracted Solutions & Advice Analysis
+
+* **🟢 Good to Go (Working Solutions):**
+  - **[Solution Name/Brief Title]:** [Explain what to do. Mention why the community recommends this, citing upvotes or positive feedback.]
+
+* **🟡 Proceed with Caution (Partial/Risky advice):**
+  - **[Advice/Solution Title]:** [Explain the advice. Highlight potential caveats, warning signs, or risks mentioned by replies.]
+
+* **🔴 Not Recommended / Broken:**
+  - **[Bad Solution/Idea]:** [Explain the proposed solution. Specifically detail why community replies say this does NOT work, is dangerous, or is outdated.]
+
+### 📋 Recommended Action Plan (Steps to Try)
+1. [Step 1: First and safest thing to try]
+2. [Step 2: Second step if first fails]
+3. [Step 3: Alternative/Advanced workaround]
+`;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+    const result = await model.generateContent(prompt);
+    return result.response.text() || 'Failed to generate solution summary.';
+  } catch (error) {
+    console.error('Error generating Reddit summary:', error);
+    return 'Error generating troubleshooting summary from Reddit threads.';
+  }
+}
+
 module.exports = {
   classifyCommentsBatch,
-  generateVideoSummary
+  generateVideoSummary,
+  generateRedditSummary
 };
+

@@ -394,3 +394,104 @@ Answer: "Glassmorphism creates a sense of depth and hierarchy in dark mode. We a
 INTERVIEW QUESTION: "Why did you build a custom markdown renderer instead of using react-markdown?"
 Answer: "Since the AI summary output from Gemini follows a highly structured, predictable format (headers, bold tags, and list bullets), importing a full third-party Markdown parsing library is unnecessary. Building a custom renderer in React takes under 50 lines of code, runs in O(N) time by splitting lines, and compiles directly to JSX. This reduces our client bundle size by over 50KB, improves load performance, and eliminates dependency vulnerabilities."
 --------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+15. SECURITY HARDENING — PROTECTING THE API FROM COMMON ATTACKS
+--------------------------------------------------------------------------------
+
+Date: June 21, 2026
+
+Context:
+- After building the Reddit integration, a security audit was performed on the
+  Express server. 10 vulnerabilities were found and patched. Zero existing
+  features were changed — only security layers were added on top.
+
+ISSUE 1 — Open CORS (Critical):
+- Problem: `app.use(cors())` with no options allows ANY website to call your
+  backend API. If deployed, an attacker's website could silently call your
+  /api/analyze endpoint from a user's browser.
+- Fix: Replaced with an allowlist-based CORS config. Only localhost:5173,
+  localhost:3000, and the optional FRONTEND_URL env var are permitted.
+  All other origins receive a CORS error.
+
+ISSUE 2 — No Rate Limiting (Critical):
+- Problem: Anyone could hit /api/analyze thousands of times per minute,
+  exhausting the Gemini 1,500 req/day quota in under 2 minutes.
+- Fix: Installed express-rate-limit. Applied a limiter to /api/analyze:
+  max 30 requests per IP every 15 minutes.
+  Returning a clear 429 Too Many Requests JSON response when exceeded.
+
+ISSUE 3 — No Input Validation on URL (Critical):
+- Problem: req.body.url was passed directly to URL parsing logic with no type
+  check or length check. An attacker could send a 10MB string body.
+- Fix: Added 3 checks before any URL parsing:
+  1. Must be present
+  2. Must be typeof 'string'
+  3. Must be <= 500 characters
+
+ISSUE 4 — Missing HTTP Security Headers (Critical):
+- Problem: By default, Express sends no security headers. Browsers are exposed
+  to clickjacking, MIME sniffing, and other attacks.
+- Fix: Installed helmet. One line: `app.use(helmet())` sets 11 headers
+  automatically (X-Content-Type-Options, X-Frame-Options, etc.)
+
+ISSUE 5 — Reddit Fetch Had No Timeout (Medium):
+- Problem: If old.reddit.com hung indefinitely, the Express async handler would
+  hang too, blocking all future requests to the server.
+- Fix: Added AbortController with a 10-second timeout using setTimeout.
+  The fetch signal is passed to the request. After 10s, the request is aborted
+  and an error is thrown.
+
+ISSUE 6 — Infinite Redirect Loop in Reddit Scraper (Medium):
+- Problem: The code recursively called fetchRedditThread() if a redirect was
+  found in the HTML. A malicious or broken URL could cause infinite recursion,
+  crashing the Node.js process with a stack overflow.
+- Fix: Added a _redirectDepth counter parameter (default 0). If depth reaches 3,
+  throw an error instead of recursing. Real-world redirects never exceed 2 hops.
+
+ISSUE 7 — No Validation on :id Path Parameter (Medium):
+- Problem: GET /api/videos/:id accepted any string. An attacker could pass
+  SQL injection strings or extremely long strings as the ID.
+- Fix: Added two guards:
+  1. Length check: id must be <= 200 chars
+  2. Pattern check: id must match /^[a-zA-Z0-9_-]+$/ (alphanumeric + _ -)
+  Any ID that fails is rejected with 400 Bad Request before hitting Supabase.
+
+ISSUE 8 — Error Messages Leaked Internal Details (Medium):
+- Problem: catch blocks sent error.message directly to clients:
+  res.status(500).json({ error: error.message })
+  This can expose Supabase URLs, internal file paths, or library stack traces.
+- Fix: All catch blocks now log the real error server-side (with stack trace)
+  using console.error('[ERROR] ... ', error.message, error.stack), but send
+  only a safe, generic message to the client.
+
+ISSUE 9 — No Body Size Limit (Low):
+- Problem: express.json() with no options allows any payload size.
+  An attacker could send a 50MB JSON body, crashing with out-of-memory.
+- Fix: Changed to express.json({ limit: '10kb' }). Any body over 10KB is
+  automatically rejected with a 413 Payload Too Large response.
+
+ISSUE 10 — Silent Missing Env Vars at Startup (Low):
+- Problem: Server started without any loud warning if API keys were missing.
+  This caused confusing runtime errors much later in the request lifecycle.
+- Fix: Added a startup check that reads all required env vars into an array,
+  and logs a clear [STARTUP ERROR] message listing exactly which vars are
+  missing. Server continues to run but the developer knows immediately.
+
+New Dependencies Added:
+  - helmet@^8.x — HTTP security headers (11 headers in 1 line)
+  - express-rate-limit@^7.x — IP-based request throttling
+
+--------------------------------------------------------------------------------
+INTERVIEW QUESTION: "What security vulnerabilities did you find and fix?"
+Answer: "After a security audit, we found and fixed 10 issues. The most critical
+were: (1) Open CORS that let any origin call our API — fixed with an allowlist.
+(2) No rate limiting — anyone could drain our Gemini API quota in minutes. We
+fixed this with express-rate-limit (30 req / 15 min per IP). (3) No HTTP
+security headers — fixed with Helmet middleware which sets 11 headers in one
+line. (4) Error messages exposing internal server details to clients — fixed
+by logging real errors server-side but returning generic messages to users.
+We also fixed a potential infinite recursion bug in the Reddit scraper and
+added a fetch timeout so a slow Reddit response can't hang the server."
+--------------------------------------------------------------------------------
+
