@@ -29,3 +29,7 @@ server/node_modules/
 *.njsproj
 *.sln
 *.sw?
+
+# Developer Diaries and System Design (Local only)
+dev_diary_and_learning_guide.txt
+system_design_review.txt
