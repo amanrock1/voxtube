@@ -13,9 +13,11 @@ if (apiKey) {
 /**
  * Classify a batch of comments into Sentiment and Category
  * @param {Array} comments - List of parsed comments { id, text }
+ * @param {number} retries - Number of retries left
+ * @param {string} modelName - Gemini model to use
  * @returns {Promise<Array>} - List of comments with analysis { id, sentiment, category }
  */
-async function classifyCommentsBatch(comments, retries = 3) {
+async function classifyCommentsBatch(comments, retries = 3, modelName = 'gemini-flash-latest') {
   if (!genAI) {
     throw new Error('Gemini AI client is not initialized due to missing API Key.');
   }
@@ -43,7 +45,7 @@ ${commentsFormatted}
 
   try {
     const model = genAI.getGenerativeModel({
-      model: 'gemini-flash-latest',
+      model: modelName,
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: {
@@ -81,13 +83,24 @@ ${commentsFormatted}
       };
     });
   } catch (error) {
-    console.error(`Error in classifyCommentsBatch (Retries left: ${retries}):`, error.message || error);
+    console.error(`Error in classifyCommentsBatch using ${modelName} (Retries left: ${retries}):`, error.message || error);
     
-    // Check if it's a 429 Too Many Requests rate limit
-    if ((error.status === 429 || (error.message && error.message.includes('429'))) && retries > 0) {
-      console.log('Rate limit hit (429). Waiting 8 seconds before retrying...');
-      await new Promise(resolve => setTimeout(resolve, 8000));
-      return classifyCommentsBatch(comments, retries - 1);
+    // Check if it's a rate limit (429) or service unavailable (503) or generic fetch error
+    const isRetryable = error.status === 429 || error.status === 503 || 
+      (error.message && (error.message.includes('429') || error.message.includes('503') || error.message.includes('fetch') || error.message.includes('demand') || error.message.includes('quota')));
+      
+    if (isRetryable) {
+      if (modelName === 'gemini-flash-latest') {
+        console.log(`Failed with gemini-flash-latest. Falling back to gemini-flash-lite-latest immediately...`);
+        return classifyCommentsBatch(comments, retries, 'gemini-flash-lite-latest');
+      }
+      
+      if (retries > 0) {
+        const waitTime = Math.pow(2, 4 - retries) * 1000 + Math.floor(Math.random() * 1000);
+        console.log(`Gemini API error/rate limit hit. Waiting ${waitTime}ms before retrying...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return classifyCommentsBatch(comments, retries - 1, modelName);
+      }
     }
 
     // Return empty fallback tags so backend doesn't crash on permanent error
@@ -102,9 +115,11 @@ ${commentsFormatted}
 /**
  * Generate a high-level executive summary of the video comments
  * @param {Array} comments - List of comments
+ * @param {number} retries - Number of retries left
+ * @param {string} modelName - Gemini model to use
  * @returns {Promise<string>} - Markdown summary
  */
-async function generateVideoSummary(comments) {
+async function generateVideoSummary(comments, retries = 3, modelName = 'gemini-flash-latest') {
   if (!genAI) {
     throw new Error('Gemini AI client is not initialized due to missing API Key.');
   }
@@ -133,11 +148,29 @@ Format the summary exactly like this:
 `;
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+    const model = genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     return result.response.text() || 'Failed to generate summary.';
   } catch (error) {
-    console.error('Error generating video summary:', error);
+    console.error(`Error generating video summary using ${modelName} (Retries left: ${retries}):`, error.message || error);
+    
+    const isRetryable = error.status === 429 || error.status === 503 || 
+      (error.message && (error.message.includes('429') || error.message.includes('503') || error.message.includes('fetch') || error.message.includes('demand') || error.message.includes('quota')));
+      
+    if (isRetryable) {
+      if (modelName === 'gemini-flash-latest') {
+        console.log(`Failed with gemini-flash-latest in video summary. Falling back to gemini-flash-lite-latest immediately...`);
+        return generateVideoSummary(comments, retries, 'gemini-flash-lite-latest');
+      }
+
+      if (retries > 0) {
+        const waitTime = Math.pow(2, 4 - retries) * 1000 + Math.floor(Math.random() * 1000);
+        console.log(`Gemini API error/rate limit hit in video summary. Waiting ${waitTime}ms before retrying...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return generateVideoSummary(comments, retries - 1, modelName);
+      }
+    }
+    
     return 'Error generating comment summary.';
   }
 }
@@ -146,9 +179,11 @@ Format the summary exactly like this:
  * Generate a high-level troubleshooting and solution summary of Reddit comments
  * @param {string} postTitle - The Reddit post title (problem description)
  * @param {Array} comments - Flattened comments array with parent_id relationships
+ * @param {number} retries - Number of retries left
+ * @param {string} modelName - Gemini model to use
  * @returns {Promise<string>} - Markdown summary
  */
-async function generateRedditSummary(postTitle, comments) {
+async function generateRedditSummary(postTitle, comments, retries = 3, modelName = 'gemini-flash-latest') {
   if (!genAI) {
     throw new Error('Gemini AI client is not initialized due to missing API Key.');
   }
@@ -209,11 +244,29 @@ Generate a clear, structured troubleshooting summary in Markdown. Be concise and
 `;
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+    const model = genAI.getGenerativeModel({ model: modelName });
     const result = await model.generateContent(prompt);
     return result.response.text() || 'Failed to generate solution summary.';
   } catch (error) {
-    console.error('Error generating Reddit summary:', error);
+    console.error(`Error generating Reddit summary using ${modelName} (Retries left: ${retries}):`, error.message || error);
+    
+    const isRetryable = error.status === 429 || error.status === 503 || 
+      (error.message && (error.message.includes('429') || error.message.includes('503') || error.message.includes('fetch') || error.message.includes('demand') || error.message.includes('quota')));
+      
+    if (isRetryable) {
+      if (modelName === 'gemini-flash-latest') {
+        console.log(`Failed with gemini-flash-latest in Reddit summary. Falling back to gemini-flash-lite-latest immediately...`);
+        return generateRedditSummary(postTitle, comments, retries, 'gemini-flash-lite-latest');
+      }
+
+      if (retries > 0) {
+        const waitTime = Math.pow(2, 4 - retries) * 1000 + Math.floor(Math.random() * 1000);
+        console.log(`Gemini API error/rate limit hit in Reddit summary. Waiting ${waitTime}ms before retrying...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return generateRedditSummary(postTitle, comments, retries - 1, modelName);
+      }
+    }
+    
     return 'Error generating troubleshooting summary from Reddit threads.';
   }
 }
@@ -223,4 +276,3 @@ module.exports = {
   generateVideoSummary,
   generateRedditSummary
 };
-
