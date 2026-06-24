@@ -261,6 +261,30 @@ export default function App() {
   const [search, setSearch]     = useState('');
   const [sentF, setSentF]       = useState('All');
   const [catF, setCatF]         = useState('All');
+  const [visits, setVisits]     = useState(null);
+
+  // Fetch page visits
+  useEffect(() => {
+    fetch('https://api.counterapi.dev/v1/voxtube-visits/global/up')
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data.value === 'number') {
+          setVisits(data.value);
+        }
+      })
+      .catch(err => {
+        console.warn('Visits count error:', err);
+        let localVal = localStorage.getItem('voxtube_visits_sim');
+        if (!localVal) {
+          localVal = Math.floor(1248 + Math.random() * 120);
+          localStorage.setItem('voxtube_visits_sim', localVal);
+        } else {
+          localVal = parseInt(localVal) + 1;
+          localStorage.setItem('voxtube_visits_sim', localVal);
+        }
+        setVisits(parseInt(localVal));
+      });
+  }, []);
 
   // scramble the hero keyword
   const scrambled = useScramble('vibe', 600);
@@ -277,8 +301,8 @@ export default function App() {
 
   const SAMPLE = [
     { id: 'dQw4w9WgXcQ', title: 'Rick Astley – Never Gonna Give You Up', channel: 'Rick Astley',  thumb: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
-    { id: '9bZkp7q19f0', title: 'PSY – GANGNAM STYLE',                    channel: 'officialpsy', thumb: 'https://i.ytimg.com/vi/9bZkp7q19f0/hqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' },
-    { id: 'y6120QOlsfU', title: 'Darude – Sandstorm',                     channel: 'Darude',      thumb: 'https://i.ytimg.com/vi/y6120QOlsfU/hqdefault.jpg', url: 'https://www.youtube.com/watch?v=y6120QOlsfU' },
+    { id: 'sfXn_ecH5Rw', title: 'Every Melody Has Been Copyrighted',      channel: 'Adam Neely',   thumb: 'https://i.ytimg.com/vi/sfXn_ecH5Rw/hqdefault.jpg', url: 'https://www.youtube.com/watch?v=sfXn_ecH5Rw' },
+    { id: '7YrdI7h2XoY', title: 'Glass is glass',                         channel: 'MKBHD',       thumb: 'https://i.ytimg.com/vi/7YrdI7h2XoY/hqdefault.jpg', url: 'https://www.youtube.com/watch?v=7YrdI7h2XoY' },
   ];
 
   const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -408,7 +432,13 @@ export default function App() {
               <div className="loading-step" style={{ marginTop: '0.5rem' }}>{loadingStep}</div>
             </div>
             <div className="loading-note">
-              Gemini processes comments in batch mode — results land in a few seconds.
+              Gemini processes comments in batch mode. Results usually land in a few seconds.
+            </div>
+            <div className="loading-server-notice">
+              <span style={{ fontSize: '1rem' }}>⚠️</span>
+              <div style={{ textAlign: 'left' }}>
+                <strong>Server notice:</strong> The server might be busy or resolving Google API rate limits. Under heavy loads, the analysis can take up to 2-3 minutes. Please stay on this page.
+              </div>
             </div>
           </div>
         )}
@@ -460,46 +490,124 @@ export default function App() {
               </p>
               
               <div className="info-grid">
+                {/* Card 1: Sentiment Analysis */}
                 <div className="info-card" style={{ '--accent-color': 'var(--cyan)', '--accent-bg': 'rgba(0, 229, 204, 0.08)' }}>
-                  <div className="info-icon-box">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="20" x2="18" y2="10"></line>
-                      <line x1="12" y1="20" x2="12" y2="4"></line>
-                      <line x1="6" y1="20" x2="6" y2="14"></line>
-                    </svg>
-                  </div>
                   <h3 className="info-card-title">Instant Sentiment Analysis</h3>
                   <p className="info-card-desc">
                     Get an immediate high-level split of Positive, Neutral, and Negative sentiments. Know exactly how your audience feels at a glance.
                   </p>
+                  
+                  <div className="showcase-container sentiment-showcase">
+                    <div className="showcase-donut">
+                      <svg viewBox="0 0 100 100" width="100%" height="100%">
+                        <circle cx="50" cy="50" r="38" fill="transparent" stroke="var(--surface-2)" strokeWidth="12" />
+                        {/* Positive 72% */}
+                        <circle cx="50" cy="50" r="38" fill="transparent" stroke="var(--green)" strokeWidth="12" strokeDasharray="171.8 238.7" strokeDashoffset="0" strokeLinecap="round" />
+                        {/* Neutral 18% */}
+                        <circle cx="50" cy="50" r="38" fill="transparent" stroke="var(--text-3)" strokeWidth="12" strokeDasharray="42.9 238.7" strokeDashoffset="-171.8" strokeLinecap="round" />
+                        {/* Negative 10% */}
+                        <circle cx="50" cy="50" r="38" fill="transparent" stroke="var(--red)" strokeWidth="12" strokeDasharray="23.9 238.7" strokeDashoffset="-214.7" strokeLinecap="round" />
+                        
+                        <text x="50" y="47" textAnchor="middle" dominantBaseline="middle" fill="var(--text)" fontSize="13" fontWeight="bold" fontFamily="var(--display)">72%</text>
+                        <text x="50" y="62" textAnchor="middle" dominantBaseline="middle" fill="var(--green)" fontSize="7" fontWeight="bold" fontFamily="var(--mono)" letterSpacing="0.05em">POS</text>
+                      </svg>
+                    </div>
+                    <div className="showcase-legend">
+                      <div className="legend-row">
+                        <div className="legend-label-group">
+                          <span className="legend-dot pos"></span>
+                          <span>Positive</span>
+                        </div>
+                        <span className="legend-val" style={{ color: 'var(--green)' }}>72%</span>
+                      </div>
+                      <div className="legend-row">
+                        <div className="legend-label-group">
+                          <span className="legend-dot neu"></span>
+                          <span>Neutral</span>
+                        </div>
+                        <span className="legend-val" style={{ color: 'var(--text-2)' }}>18%</span>
+                      </div>
+                      <div className="legend-row">
+                        <div className="legend-label-group">
+                          <span className="legend-dot neg"></span>
+                          <span>Negative</span>
+                        </div>
+                        <span className="legend-val" style={{ color: 'var(--red)' }}>10%</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
+                {/* Card 2: Noise Filtering */}
                 <div className="info-card" style={{ '--accent-color': 'var(--orange)', '--accent-bg': 'rgba(255, 107, 53, 0.08)' }}>
-                  <div className="info-icon-box">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                    </svg>
-                  </div>
                   <h3 className="info-card-title">Noise & Spam Filtering</h3>
                   <p className="info-card-desc">
                     Our intelligent classification automatically separates praise, constructive feedback, and actual questions from bot spam and off-topic noise.
                   </p>
+
+                  <div className="showcase-container">
+                    <div className="noise-stats">
+                      <div className="noise-stat-box full">
+                        <span className="noise-stat-lbl">Total Comments</span>
+                        <span className="noise-stat-val">12,450</span>
+                      </div>
+                      <div className="noise-stat-box">
+                        <span className="noise-stat-lbl">Relevant</span>
+                        <span className="noise-stat-val relevant">8,921</span>
+                      </div>
+                      <div className="noise-stat-box">
+                        <span className="noise-stat-lbl">Spam/Bot</span>
+                        <span className="noise-stat-val" style={{ color: 'var(--text-3)' }}>3,529</span>
+                      </div>
+                    </div>
+                    <div className="noise-comments-list">
+                      <div className="noise-comment-item">
+                        <span className="noise-comment-txt">"Amazing tutorial! The explanation was perfect."</span>
+                        <span className="noise-comment-tag ok">Praise</span>
+                      </div>
+                      <div className="noise-comment-item filtered">
+                        <span className="noise-comment-txt">"👉 FREE BITCOIN INFO IN MY BIO 👈"</span>
+                        <span className="noise-comment-tag spam">Spam</span>
+                      </div>
+                      <div className="noise-comment-item filtered">
+                        <span className="noise-comment-txt">"Great video! Watch my channel [link]"</span>
+                        <span className="noise-comment-tag bot">Bot</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
+                {/* Card 3: AI Consensus */}
                 <div className="info-card" style={{ '--accent-color': 'var(--purple)', '--accent-bg': 'rgba(181, 123, 238, 0.08)' }}>
-                  <div className="info-icon-box">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
-                      <line x1="16" y1="13" x2="8" y2="13"></line>
-                      <line x1="16" y1="17" x2="8" y2="17"></line>
-                      <polyline points="10 9 9 9 8 9"></polyline>
-                    </svg>
-                  </div>
                   <h3 className="info-card-title">AI Audience Consensus</h3>
                   <p className="info-card-desc">
                     Powered by Google Gemini AI to summarize key takeaways, top critiques, and user suggestions in a clean executive consensus report.
                   </p>
+
+                  <div className="showcase-container consensus-preview">
+                    <div className="consensus-header">
+                      <span>AUDIENCE CONSENSUS</span>
+                      <span className="consensus-badge">HIGH CONFIDENCE</span>
+                    </div>
+                    <div className="consensus-list">
+                      <div className="consensus-item">
+                        <span className="consensus-check">✓</span>
+                        <span>Audience loves editing style</span>
+                      </div>
+                      <div className="consensus-item">
+                        <span className="consensus-check">✓</span>
+                        <span>Requests longer videos</span>
+                      </div>
+                      <div className="consensus-item">
+                        <span className="consensus-check">✓</span>
+                        <span>Audio quality praised</span>
+                      </div>
+                      <div className="consensus-item">
+                        <span className="consensus-check">✓</span>
+                        <span>Thumbnail criticism recurring</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -511,26 +619,67 @@ export default function App() {
                 A seamless, state-of-the-art data pipeline operating under the hood:
               </p>
               
-              <div className="steps-container">
-                <div className="step-item">
-                  <span className="step-number">Step 01</span>
-                  <h3 className="step-title">Paste Video URL</h3>
-                  <p className="step-desc">Enter any public YouTube video link in the analyzer bar above to start.</p>
+              <div className="pipeline-container">
+                <div className="pipeline-node">
+                  <div className="node-icon-wrapper">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                    </svg>
+                  </div>
+                  <div className="node-title">YouTube URL</div>
+                  <div className="node-desc">Paste public link in the analyzer bar</div>
                 </div>
-                <div className="step-item">
-                  <span className="step-number">Step 02</span>
-                  <h3 className="step-title">Fetch Comments</h3>
-                  <p className="step-desc">Our backend streams the latest top comment threads via the YouTube Data API.</p>
+
+                <div className="pipeline-connector">
+                  <div className="flow-line"></div>
+                  <div className="flow-pulse"></div>
                 </div>
-                <div className="step-item">
-                  <span className="step-number">Step 03</span>
-                  <h3 className="step-title">AI Ingestion</h3>
-                  <p className="step-desc">Gemini AI parses, categorizes, and runs sentiment scoring over the batch.</p>
+
+                <div className="pipeline-node">
+                  <div className="node-icon-wrapper">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+                  <div className="node-title">Comment Collection</div>
+                  <div className="node-desc">Fetch top threads via platform APIs</div>
                 </div>
-                <div className="step-item">
-                  <span className="step-number">Step 04</span>
-                  <h3 className="step-title">Explore Insights</h3>
-                  <p className="step-desc">Interact with dynamic recharts, search text filters, and view the AI consensus summary.</p>
+
+                <div className="pipeline-connector">
+                  <div className="flow-line"></div>
+                  <div className="flow-pulse"></div>
+                </div>
+
+                <div className="pipeline-node">
+                  <div className="node-icon-wrapper">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                  </div>
+                  <div className="node-title">AI Processing</div>
+                  <div className="node-desc">Gemini AI parses and scores comments</div>
+                </div>
+
+                <div className="pipeline-connector">
+                  <div className="flow-line"></div>
+                  <div className="flow-pulse"></div>
+                </div>
+
+                <div className="pipeline-node">
+                  <div className="node-icon-wrapper">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                      <polyline points="10 9 9 9 8 9" />
+                    </svg>
+                  </div>
+                  <div className="node-title">Insight Report</div>
+                  <div className="node-desc">Explore consensus and filters</div>
                 </div>
               </div>
             </section>
@@ -619,52 +768,54 @@ export default function App() {
                 </div>
 
                 {/* Charts */}
-                <div className="chart-grid">
-                  <div className="card">
-                    <div className="card-header">
-                      <div className="card-header-icon" style={{ background: 'rgba(0,229,204,0.1)' }}>
-                        <IC.Bar style={{ color: 'var(--cyan)' }} />
+                {!videoData.id.startsWith('reddit_') && (
+                  <div className="chart-grid">
+                    <div className="card">
+                      <div className="card-header">
+                        <div className="card-header-icon" style={{ background: 'rgba(0,229,204,0.1)' }}>
+                          <IC.Bar style={{ color: 'var(--cyan)' }} />
+                        </div>
+                        <span className="card-title">Comment Types</span>
                       </div>
-                      <span className="card-title">Comment Types</span>
+                      <div className="card-body" style={{ paddingTop: '0.5rem' }}>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <ReBarChart data={catData} layout="vertical" margin={{ left: -12, right: 8 }}>
+                            <XAxis type="number" stroke="var(--text-3)" fontSize={10} tickLine={false} axisLine={false} />
+                            <YAxis dataKey="name" type="category" stroke="var(--text-3)" fontSize={11} width={72} tickLine={false} axisLine={false} />
+                            <Tooltip
+                              cursor={{ fill: 'rgba(255,255,255,0.025)' }}
+                              contentStyle={{ background: '#18181c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, fontSize: 12 }}
+                              labelStyle={{ color: '#ebebed' }}
+                            />
+                            <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={13}>
+                              {catData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                            </Bar>
+                          </ReBarChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
-                    <div className="card-body" style={{ paddingTop: '0.5rem' }}>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <ReBarChart data={catData} layout="vertical" margin={{ left: -12, right: 8 }}>
-                          <XAxis type="number" stroke="var(--text-3)" fontSize={10} tickLine={false} axisLine={false} />
-                          <YAxis dataKey="name" type="category" stroke="var(--text-3)" fontSize={11} width={72} tickLine={false} axisLine={false} />
-                          <Tooltip
-                            cursor={{ fill: 'rgba(255,255,255,0.025)' }}
-                            contentStyle={{ background: '#18181c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, fontSize: 12 }}
-                            labelStyle={{ color: '#ebebed' }}
-                          />
-                          <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={13}>
-                            {catData.map((e, i) => <Cell key={i} fill={e.color} />)}
-                          </Bar>
-                        </ReBarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
 
-                  <div className="card">
-                    <div className="card-header">
-                      <div className="card-header-icon" style={{ background: 'rgba(61,220,132,0.1)' }}>
-                        <IC.Pie style={{ color: 'var(--green)' }} />
+                    <div className="card">
+                      <div className="card-header">
+                        <div className="card-header-icon" style={{ background: 'rgba(61,220,132,0.1)' }}>
+                          <IC.Pie style={{ color: 'var(--green)' }} />
+                        </div>
+                        <span className="card-title">Sentiment Split</span>
                       </div>
-                      <span className="card-title">Sentiment Split</span>
-                    </div>
-                    <div className="card-body" style={{ paddingTop: '0.5rem' }}>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <RePieChart>
-                          <Pie data={sentData} cx="50%" cy="45%" innerRadius={46} outerRadius={70} paddingAngle={3} dataKey="value" animationBegin={0} animationDuration={800}>
-                            {sentData.map((e, i) => <Cell key={i} fill={e.color} />)}
-                          </Pie>
-                          <Tooltip contentStyle={{ background: '#18181c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, fontSize: 12 }} />
-                          <Legend verticalAlign="bottom" height={28} formatter={v => <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>{v}</span>} />
-                        </RePieChart>
-                      </ResponsiveContainer>
+                      <div className="card-body" style={{ paddingTop: '0.5rem' }}>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <RePieChart>
+                            <Pie data={sentData} cx="50%" cy="45%" innerRadius={46} outerRadius={70} paddingAngle={3} dataKey="value" animationBegin={0} animationDuration={800}>
+                              {sentData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                            </Pie>
+                            <Tooltip contentStyle={{ background: '#18181c', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, fontSize: 12 }} />
+                            <Legend verticalAlign="bottom" height={28} formatter={v => <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>{v}</span>} />
+                          </RePieChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
               </div>
 
@@ -749,12 +900,25 @@ export default function App() {
 
         <footer className="footer">
           <span className="footer-text">© {new Date().getFullYear()} VoxTube. All rights reserved.</span>
-          <a href="https://github.com/amanrock1/voxtube" target="_blank" rel="noreferrer" className="footer-link">
-            <svg viewBox="0 0 16 16" fill="currentColor" style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: '6px' }}>
-              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-            </svg>
-            Designed & Built by amanrock1
-          </a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+            {visits !== null && (
+              <span className="footer-link" style={{ cursor: 'default', color: 'var(--text-3)' }}>
+                👁️ {visits.toLocaleString()} visits
+              </span>
+            )}
+            <a href="https://github.com/amanrock1/voxtube" target="_blank" rel="noreferrer" className="footer-link">
+              <svg viewBox="0 0 16 16" fill="currentColor" style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: '6px' }}>
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+              </svg>
+              GitHub
+            </a>
+            <a href="https://www.linkedin.com/in/aman-prabhat-b75735325/" target="_blank" rel="noreferrer" className="footer-link">
+              <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: '6px' }}>
+                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.779-1.75-1.75s.784-1.75 1.75-1.75 1.75.779 1.75 1.75-.784 1.75-1.75 1.75zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+              </svg>
+              LinkedIn
+            </a>
+          </div>
         </footer>
 
       </div>

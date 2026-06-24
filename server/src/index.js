@@ -56,7 +56,7 @@ app.use(cors({
     // We still accept them for the health check, but all other routes require
     // the x-api-key header check (requireApiKey middleware) as the real guard.
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
+    if (origin.startsWith('http://localhost:') || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     return callback(new Error('CORS: Origin not allowed'), false);
@@ -267,6 +267,15 @@ app.post('/api/analyze', requireApiKey, analyzeLimiter, async (req, res) => {
   } catch (error) {
     // ─── SECURITY: Never leak internal error details to the client ────────────
     console.error('[ERROR] Analysis pipeline failed:', error.message, error.stack || '');
+    
+    const msg = error.message || '';
+    if (msg.includes('disabled comments') || msg.includes('comments disabled')) {
+      return res.status(400).json({ error: 'Comments are disabled for this YouTube video.' });
+    }
+    if (msg.includes('private') || msg.includes('not found')) {
+      return res.status(400).json({ error: 'This video is private or does not exist.' });
+    }
+    
     res.status(500).json({ error: 'An error occurred during comment analysis. Please try again.' });
   }
 });

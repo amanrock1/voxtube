@@ -1,9 +1,9 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/amanrock1/voxtube/main/client/public/logo.png" alt="VoxTube Logo" width="120" onerror="this.src='https://via.placeholder.com/150?text=VoxTube+Logo'" />
+  <img src="https://raw.githubusercontent.com/amanrock1/voxtube/main/client/public/favicon.png" alt="VoxTube Logo" width="120" onerror="this.src='https://via.placeholder.com/150?text=VoxTube+Logo'" />
   <h1>🎙️ VoxTube</h1>
   <p><strong>Turn Audience Noise into Creator Signal: AI-Powered YouTube & Reddit Comment Analytics</strong></p>
 
-  [![Vercel Deployment](https://img.shields.io/badge/Live_Demo-Hosted_on_Vercel-6366f1?style=for-the-badge&logo=vercel)](https://voxtube-aman.vercel.app)
+  [![Live Demo](https://img.shields.io/badge/Live_Demo-Hosted_on_Vercel-6366f1?style=for-the-badge&logo=vercel)](https://voxtube-aman.vercel.app)
   [![GitHub Repository](https://img.shields.io/badge/GitHub-Repo-181717?style=for-the-badge&logo=github)](https://github.com/amanrock1/voxtube)
   
   <br />
@@ -31,20 +31,39 @@ YouTube creators, community managers, and brands face a massive scale problem. A
 
 ---
 
-## 📷 System Interface
+## 📷 System Interface & Screenshots
 
-Here is a preview of the VoxTube interface designed with modern CSS-first glassmorphism principles:
+Here are previews of the VoxTube interface designed with modern CSS-first glassmorphism principles.
 
+> [!TIP]
+> To replace these placeholders with your actual screenshots, create a folder named `docs/screenshots/` in your repository root, save your screenshots with the filenames listed below, and they will display automatically on GitHub!
+
+### 1. Landing Page
 <p align="center">
-  <img src="https://via.placeholder.com/800x450.png?text=VoxTube+Landing+Page" alt="VoxTube Premium Landing Page" width="800" style="border-radius: 8px; box-shadow: 0 4px 30px rgba(0,0,0,0.5);" />
+  <img src="./docs/screenshots/landing_page.png" alt="VoxTube Premium Landing Page" width="800" onerror="this.src='https://via.placeholder.com/800x450.png?text=VoxTube+Landing+Page+Screenshot+Placeholder'" style="border-radius: 8px; box-shadow: 0 4px 30px rgba(0,0,0,0.5);" />
   <br />
-  <em>Figure 1: High-fidelity dark mode landing page featuring interactive test cards and an animated particle background.</em>
+  <em>Figure 1: High-fidelity dark mode landing page featuring interactive search ingestion bar and quick example cards.</em>
 </p>
 
+### 2. Why VoxTube & How It Works Redesign
 <p align="center">
-  <img src="https://via.placeholder.com/800x450.png?text=VoxTube+Creator+Dashboard" alt="VoxTube Creator Dashboard" width="800" style="border-radius: 8px; box-shadow: 0 4px 30px rgba(0,0,0,0.5);" />
+  <img src="./docs/screenshots/features_pipeline.png" alt="VoxTube Features and Connected Workflow Pipeline" width="800" onerror="this.src='https://via.placeholder.com/800x450.png?text=VoxTube+Features+and+Workflow+Pipeline+Placeholder'" style="border-radius: 8px; box-shadow: 0 4px 30px rgba(0,0,0,0.5);" />
   <br />
-  <em>Figure 2: Real-time analytics view presenting Gemini-generated summaries, sentiment distribution graphs, and a filtered comment inbox.</em>
+  <em>Figure 2: Product-driven showcase cards (Sentiment Donut, Fading Spam Filter, AI Consensus Report) and the connected animated workflow pipeline.</em>
+</p>
+
+### 3. YouTube Video Comment Analysis
+<p align="center">
+  <img src="./docs/screenshots/youtube_analysis.png" alt="YouTube Comment Analysis Dashboard" width="800" onerror="this.src='https://via.placeholder.com/800x450.png?text=YouTube+Video+Analysis+Dashboard+Placeholder'" style="border-radius: 8px; box-shadow: 0 4px 30px rgba(0,0,0,0.5);" />
+  <br />
+  <em>Figure 3: Detailed YouTube creator dashboard showing sentiment distribution charts, interactive categorization grids, and aggregated consensus reports.</em>
+</p>
+
+### 4. Reddit Comment Thread Analysis
+<p align="center">
+  <img src="./docs/screenshots/reddit_analysis.png" alt="Reddit Comment Analysis Dashboard" width="800" onerror="this.src='https://via.placeholder.com/800x450.png?text=Reddit+Comment+Analysis+Dashboard+Placeholder'" style="border-radius: 8px; box-shadow: 0 4px 30px rgba(0,0,0,0.5);" />
+  <br />
+  <em>Figure 4: Reddit troubleshooting analysis, highlighting consensus advice action plans and interactive filtered discussion feeds without charts.</em>
 </p>
 
 ---
