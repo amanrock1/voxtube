@@ -17,13 +17,13 @@
 
 ---
 
-## 📖 Introduction & The Problem
+##  Introduction & The Problem
 
 YouTube creators, community managers, and brands face a massive scale problem. A single video can attract thousands of comments. Within this sea of text lies invaluable feedback, product suggestions, business inquiries, and bugs. Unfortunately, it is drowned out by link spam, self-promotion, bot rings, and low-effort noise. 
 
 **VoxTube** is an enterprise-grade analytics engine designed to extract signal from this noise in seconds. By connecting the **YouTube Data API v3** and **Reddit Data Ingestion** with **Google Gemini AI**, VoxTube aggregates, classifies, and summarizes audience feedback. It transforms thousands of lines of text into structured, actionable insights for content strategy and business growth.
 
-### 🌟 Key Value Props
+###  Key Value Props
 * **Instant Sentiment Analysis:** No more scrolling for hours. Instantly read the emotional pulse (Positive, Neutral, Negative) of your audience.
 * **Smart Intent Categorization:** Comments are automatically tagged as **Praise**, **Question**, **Feedback/Bug**, or **Noise** using zero-shot AI classification.
 * **Quota-Friendly Intelligent Cache:** Implements server-side PostgreSQL caching via Supabase to deliver sub-50ms repeat loads and eliminate costly API overruns.
@@ -31,12 +31,9 @@ YouTube creators, community managers, and brands face a massive scale problem. A
 
 ---
 
-## 📷 System Interface & Screenshots
+##  System Interface & Screenshots
 
 Here are previews of the VoxTube interface designed with modern CSS-first glassmorphism principles.
-
-> [!TIP]
-> To replace these placeholders with your actual screenshots, create a folder named `docs/screenshots/` in your repository root, save your screenshots with the filenames listed below, and they will display automatically on GitHub!
 
 ### 1. Landing Page
 <p align="center">
@@ -68,7 +65,7 @@ Here are previews of the VoxTube interface designed with modern CSS-first glassm
 
 ---
 
-## ✨ Features
+##  Features
 
 - [x] **Dual Source Ingestion:** Seamless support for both YouTube Video URLs and Reddit Thread URLs.
 - [x] **Zero-Shot AI Pipeline:** Multi-comment batching using the `gemini-2.5-flash-lite` model for sentiment analysis and intent classification.
@@ -79,7 +76,7 @@ Here are previews of the VoxTube interface designed with modern CSS-first glassm
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 | Layer | Technology | Purpose |
 | :--- | :--- | :--- |
@@ -93,7 +90,7 @@ Here are previews of the VoxTube interface designed with modern CSS-first glassm
 
 ---
 
-## 🧬 Project Architecture & Data Flow
+##  Project Architecture & Data Flow
 
 The system acts as a secure proxy between clients, storage, and third-party APIs. To protect API quotas and maximize performance, a **Database Caching Layer** acts as the primary data gatekeeper.
 
@@ -127,7 +124,7 @@ sequenceDiagram
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```text
 you-tube-project/
@@ -159,7 +156,7 @@ you-tube-project/
 
 ---
 
-## ⚡ Setup & Local Installation
+##  Setup & Local Installation
 
 ### Prerequisites
 * **Node.js** (v18.x or higher)
@@ -259,7 +256,7 @@ node src/database/seed.js
 
 ---
 
-## 🔑 Environment Variables
+##  Environment Variables
 
 ### Backend (`server/.env`)
 * `PORT`: The port the Express server will listen on (default `5000`).
@@ -276,7 +273,7 @@ node src/database/seed.js
 
 ---
 
-## 🧠 Technical Challenges & Resolutions
+##  Technical Challenges & Resolutions
 
 ### 1. The Daily Quota Crisis ("Why is everything Noise?")
 * **Challenge:** During validation tests using the experimental `@google/genai` SDK with `gemini-2.5-flash`, the application silently started classifying all comments as "Noise/Spam" after 3–4 URL queries. The server did not crash, but the UI summary stayed at "still generating..." indefinitely.
@@ -303,22 +300,15 @@ node src/database/seed.js
 
 ---
 
-## 📚 Key Learnings
+##  Key Learnings
 * **Defensive Caching Design:** Database caches must include validation and auto-healing logic; caching a broken fallback response is worse than not caching at all.
 * **Token Budget Management:** Structural choices in prompt JSON formats have massive impacts on network latency and API charges. Keep formats minimal.
 * **Security First:** Writing secure code doesn't require complex rewrites. Strategic placement of middleware like Helmet and rate limiters secures an Express server against 90% of common automated scripts.
 
 ---
 
-## 🔮 Future Roadmap (V2 Creator Portal)
-* [ ] **Google OAuth 2.0 Integration:** Allow creators to log in and sync their private channels securely.
-* [ ] **Auto-Moderation Engine:** Automatically hide or flag comments identified as spam, toxic, or promotional back on YouTube using API writes.
-* [ ] **Business Lead Inbox:** Extract email addresses, profile links, and business inquiries into a dedicated CRM dashboard for creators.
-* [ ] **Channel Comparison Metrics:** Run cross-video comparisons to see what topics drive the most positive engagement vs. critical bug reports.
 
----
-
-## 👨‍💻 Author
+##  Author
 
 Built and designed by **amanrock1**.
 
@@ -327,5 +317,5 @@ Built and designed by **amanrock1**.
 
 ---
 
-## 📄 License
+##  License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
