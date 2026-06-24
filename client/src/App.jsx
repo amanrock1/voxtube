@@ -406,8 +406,8 @@ export default function App() {
         {/* ── Navbar ── */}
         <header className="navbar">
           <div className="logo" onClick={reset}>
-            <div className="logo-icon" style={{ position: 'relative' }}>
-              <IC.Play />
+            <div className="logo-icon" style={{ position: 'relative', overflow: 'hidden' }}>
+              <img src="/favicon.png" alt="VoxTube Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
               <span className="logo-ring" />
             </div>
             <span className="logo-name">VoxTube</span>
@@ -435,7 +435,6 @@ export default function App() {
               Gemini processes comments in batch mode. Results usually land in a few seconds.
             </div>
             <div className="loading-server-notice">
-              <span style={{ fontSize: '1rem' }}>⚠️</span>
               <div style={{ textAlign: 'left' }}>
                 <strong>Server notice:</strong> The server might be busy or resolving Google API rate limits. Under heavy loads, the analysis can take up to 2-3 minutes. Please stay on this page.
               </div>
@@ -903,7 +902,7 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
             {visits !== null && (
               <span className="footer-link" style={{ cursor: 'default', color: 'var(--text-3)' }}>
-                👁️ {visits.toLocaleString()} visits
+                {visits.toLocaleString()} visits
               </span>
             )}
             <a href="https://github.com/amanrock1/voxtube" target="_blank" rel="noreferrer" className="footer-link">

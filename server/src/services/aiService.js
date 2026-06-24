@@ -140,7 +140,7 @@ Generate a structured executive summary in clean Markdown from the following com
 ${topCommentsText}
 
 Format the summary exactly like this:
-### 📊 Audience Sentiment & Feedback Summary
+### Audience Sentiment & Feedback Summary
 
 * **General Consensus:** (1-2 sentences summarizing the general vibe and reception)
 * **What They Loved:** (Bullet points listing the top 3 aspects the audience highly praised)
