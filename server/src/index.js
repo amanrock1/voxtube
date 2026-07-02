@@ -38,6 +38,9 @@ function requireApiKey(req, res, next) {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// ─── SECURITY: Trust proxy — allows rate limiter to see real IPs behind Vercel/Render 
+app.set('trust proxy', 1);
+
 // ─── SECURITY: Helmet — sets 11 secure HTTP headers automatically ─────────────
 app.use(helmet());
 
@@ -51,11 +54,11 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // ─── SECURITY: Block requests with no origin on non-health endpoints ──────
-    // No-origin requests come from curl/Postman/scripts that bypass CORS entirely.
-    // We still accept them for the health check, but all other routes require
-    // the x-api-key header check (requireApiKey middleware) as the real guard.
-    if (!origin) return callback(null, true);
+    // ─── SECURITY: Reject requests with no origin in production to prevent script/Postman abuse
+    if (!origin) {
+      if (process.env.NODE_ENV === 'development') return callback(null, true);
+      return callback(new Error('CORS: Origin not allowed (Missing Origin Header)'), false);
+    }
     if (origin.startsWith('http://localhost:') || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
