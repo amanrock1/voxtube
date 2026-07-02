@@ -99,12 +99,15 @@ sequenceDiagram
     autonumber
     actor Creator as User / Browser
     participant API as Express API Server
+    participant CF as Cloudflare Turnstile
     participant DB as Supabase PostgreSQL
     participant YT as YouTube Data API
     participant AI as Gemini API Engine
 
-    Creator->>API: POST /api/analyze { url } (with X-API-KEY)
+    Creator->>API: POST /api/analyze { url, turnstileToken }
     API->>API: Validate URL format & rate limits
+    API->>CF: POST /siteverify (Verify CAPTCHA token)
+    CF-->>API: Return success status
     API->>DB: Check Cache: SELECT * FROM videos WHERE id = videoId
     alt Cache Hit (Healthy Record)
         DB-->>API: Return cached video + comments
@@ -244,10 +247,10 @@ node src/database/seed.js
 3. Create a `.env` file:
    ```bash
    echo "VITE_API_URL=http://localhost:5000" > .env
-   echo "VITE_API_KEY=your_generated_secret_key_here" >> .env
+   echo "VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA" >> .env
    ```
    > [!IMPORTANT]
-   > Make sure the `VITE_API_KEY` matches the `CLIENT_API_KEY` you specified in your server `.env` file.
+   > The dummy Turnstile key `1x00000000000000000000AA` will always pass locally for development. For production, you must use a real Sitekey from your Cloudflare dashboard.
 4. Start the frontend Vite application:
    ```bash
    npm run dev
@@ -261,15 +264,15 @@ node src/database/seed.js
 ### Backend (`server/.env`)
 * `PORT`: The port the Express server will listen on (default `5000`).
 * `SUPABASE_URL`: Your Supabase Project API URL (found under Project Settings -> API).
-* `SUPABASE_KEY`: Your Supabase Anon Public/Service Key.
+* `SUPABASE_KEY`: Your Supabase `service_role` Key (Requires admin privileges to bypass RLS).
 * `GEMINI_API_KEY`: API key generated from Google AI Studio.
 * `YOUTUBE_API_KEY`: API key generated from the Google Cloud Platform Console.
-* `CLIENT_API_KEY`: A random hex string used to authorize requests from the client.
+* `TURNSTILE_SECRET_KEY`: Your Cloudflare Turnstile Secret Key used to verify CAPTCHA tokens.
 * `FRONTEND_URL` *(Optional)*: The URL of your hosted React application to configure production CORS.
 
 ### Frontend (`client/.env`)
 * `VITE_API_URL`: The URL of your Express API backend.
-* `VITE_API_KEY`: Must match the `CLIENT_API_KEY` in the server env to pass auth filters.
+* `VITE_TURNSTILE_SITE_KEY`: Your Cloudflare Turnstile public Sitekey.
 
 ---
 
