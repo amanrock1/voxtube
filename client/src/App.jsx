@@ -496,7 +496,7 @@ export default function App() {
               <div className="captcha-wrap" style={{ marginTop: '1.2rem', display: 'flex', justifyContent: 'center' }}>
                 <Turnstile
                   ref={turnstileRef}
-                  sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                  siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
                   onSuccess={(token) => setTurnstileToken(token)}
                   onError={() => setError('CAPTCHA initialization failed. Please reload the page.')}
                   onExpire={() => {
