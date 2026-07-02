@@ -11,28 +11,47 @@ const { classifyCommentsBatch, generateVideoSummary, generateRedditSummary } = r
 dotenv.config();
 
 // ─── SECURITY: Startup environment variable check ────────────────────────────
-const REQUIRED_ENV_VARS = ['SUPABASE_URL', 'SUPABASE_KEY', 'GEMINI_API_KEY', 'YOUTUBE_API_KEY', 'CLIENT_API_KEY'];
+const REQUIRED_ENV_VARS = ['SUPABASE_URL', 'SUPABASE_KEY', 'GEMINI_API_KEY', 'YOUTUBE_API_KEY', 'TURNSTILE_SECRET_KEY'];
 const missingVars = REQUIRED_ENV_VARS.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error(`[STARTUP ERROR] Missing required environment variables: ${missingVars.join(', ')}`);
   console.error('Please check your .env file. Server will continue but some features will fail.');
 }
 
-// ─── SECURITY: API Key middleware — validates x-api-key header ────────────────
-// This stops random people from calling your backend directly (Postman/curl/scripts)
-// and burning your Gemini/YouTube quotas. The key is shared only with your frontend.
-const CLIENT_API_KEY = process.env.CLIENT_API_KEY;
-function requireApiKey(req, res, next) {
-  if (!CLIENT_API_KEY) {
-    // If key is not configured, skip in dev mode (with a warning)
-    console.warn('[WARN] CLIENT_API_KEY is not set — API is unprotected!');
-    return next();
+// ─── SECURITY: Cloudflare Turnstile CAPTCHA middleware ────────────────────────
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY;
+async function requireTurnstile(req, res, next) {
+  // Allow bypassing in development if key is not set
+  if (!TURNSTILE_SECRET_KEY) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[WARN] TURNSTILE_SECRET_KEY is not set — CAPTCHA verification skipped.');
+      return next();
+    }
+    return res.status(500).json({ error: 'Server misconfiguration: CAPTCHA key is missing.' });
   }
-  const providedKey = req.headers['x-api-key'];
-  if (!providedKey || providedKey !== CLIENT_API_KEY) {
-    return res.status(401).json({ error: 'Unauthorized: Invalid or missing API key.' });
+
+  const { turnstileToken } = req.body;
+  if (!turnstileToken) {
+    return res.status(400).json({ error: 'Security check (CAPTCHA) token is required.' });
   }
-  next();
+
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `secret=${encodeURIComponent(TURNSTILE_SECRET_KEY)}&response=${encodeURIComponent(turnstileToken)}`
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      return res.status(403).json({ error: 'Security check (CAPTCHA) failed. Please try again.' });
+    }
+
+    next();
+  } catch (error) {
+    console.error('[ERROR] Turnstile validation failed:', error.message);
+    return res.status(500).json({ error: 'Failed to verify security check. Please try again later.' });
+  }
 }
 
 const app = express();
@@ -90,7 +109,7 @@ app.get('/api/health', (req, res) => {
  * Body: { url }
  * Analyze comments for a public YouTube video or Reddit post
  */
-app.post('/api/analyze', requireApiKey, analyzeLimiter, async (req, res) => {
+app.post('/api/analyze', requireTurnstile, analyzeLimiter, async (req, res) => {
   const { url } = req.body;
 
   // ─── SECURITY: Input validation ──────────────────────────────────────────────
@@ -288,7 +307,7 @@ app.post('/api/analyze', requireApiKey, analyzeLimiter, async (req, res) => {
  * GET /api/videos
  * Fetch recently analyzed videos
  */
-app.get('/api/videos', requireApiKey, async (req, res) => {
+app.get('/api/videos', async (req, res) => {
   try {
     const { data: videos, error } = await supabase
       .from('videos')
@@ -308,7 +327,7 @@ app.get('/api/videos', requireApiKey, async (req, res) => {
  * GET /api/videos/:id
  * Fetch details and comments for a specific analyzed video
  */
-app.get('/api/videos/:id', requireApiKey, async (req, res) => {
+app.get('/api/videos/:id', async (req, res) => {
   const { id } = req.params;
 
   // ─── SECURITY: Validate :id path parameter ───────────────────────────────────

@@ -4,6 +4,7 @@ import {
   BarChart as ReBarChart, Bar,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 // ──────────────────────────────────────────────────────────────────
 // INLINE ICONS  (hand-crafted SVGs — no library needed)
@@ -262,6 +263,10 @@ export default function App() {
   const [sentF, setSentF]       = useState('All');
   const [catF, setCatF]         = useState('All');
   const [visits, setVisits]     = useState(null);
+  
+  // ─── CAPTCHA Security ───
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const turnstileRef = useRef(null);
 
   // Fetch page visits
   useEffect(() => {
@@ -328,6 +333,10 @@ export default function App() {
 
   const analyze = async (videoUrl) => {
     if (!videoUrl.trim()) return;
+    if (!turnstileToken) {
+      setError('Please complete the security check (CAPTCHA) first.');
+      return;
+    }
     setLoading(true); setError('');
     setStep('Connecting to platform API…');
     const steps = [
@@ -342,14 +351,23 @@ export default function App() {
     try {
       const res = await fetch(`${API}/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-        body: JSON.stringify({ url: videoUrl }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: videoUrl, turnstileToken }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Analysis failed'); }
       const d = await res.json();
       setVideo(d.video); setComments(d.comments); setView('dashboard');
-    } catch (e) { setError(e.message); }
-    finally { clearInterval(timer); setLoading(false); setStep(''); }
+    } catch (e) { 
+      setError(e.message); 
+      // Reset CAPTCHA on error
+      turnstileRef.current?.reset();
+      setTurnstileToken('');
+    }
+    finally { 
+      clearInterval(timer); 
+      setLoading(false); 
+      setStep(''); 
+    }
   };
 
   const reset = () => {
@@ -472,6 +490,21 @@ export default function App() {
                 >
                   <IC.Zap /> Analyze
                 </button>
+              </div>
+              
+              {/* Turnstile CAPTCHA Widget */}
+              <div className="captcha-wrap" style={{ marginTop: '1.2rem', display: 'flex', justifyContent: 'center' }}>
+                <Turnstile
+                  ref={turnstileRef}
+                  sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                  onSuccess={(token) => setTurnstileToken(token)}
+                  onError={() => setError('CAPTCHA initialization failed. Please reload the page.')}
+                  onExpire={() => {
+                    setTurnstileToken('');
+                    setError('CAPTCHA expired. Please complete the security check again.');
+                  }}
+                  options={{ theme: 'dark' }}
+                />
               </div>
 
               {error && (

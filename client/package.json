@@ -10,9 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@marsidev/react-turnstile": "^1.5.3",
+    "lucide-react": "^0.363.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "lucide-react": "^0.363.0",
     "recharts": "^2.12.3"
   },
   "devDependencies": {
