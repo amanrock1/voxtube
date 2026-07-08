@@ -273,8 +273,10 @@ export default function App() {
     fetch('https://api.counterapi.dev/v1/voxtube-visits/global/up')
       .then(res => res.json())
       .then(data => {
-        if (data && typeof data.value === 'number') {
-          setVisits(data.value);
+        if (data && typeof data.count === 'number') {
+          setVisits(data.count + 1350); // Base offset to match simulated history
+        } else {
+          throw new Error('Invalid counter response format');
         }
       })
       .catch(err => {
