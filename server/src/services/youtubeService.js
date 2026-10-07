@@ -1,111 +1,116 @@
-const dotenv = require('dotenv');
-dotenv.config();
+const { AppError } = require('../utils/errors');
 
-const API_KEY = process.env.YOUTUBE_API_KEY;
+const API_BASE = 'https://www.googleapis.com/youtube/v3';
+const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 
-/**
- * Helper to extract YouTube Video ID from various URL formats
- * @param {string} url - YouTube URL
- * @returns {string|null} - Video ID or null
- */
-function extractVideoId(url) {
-  if (!url) return null;
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : null;
+/** Extracts an 11-character video id from the common YouTube URL shapes. */
+function extractVideoId(input) {
+  if (typeof input !== 'string') return null;
+  let raw = input.trim();
+  if (!raw) return null;
+  if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
+
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+
+  const host = url.hostname.toLowerCase().replace(/^(www|m)\./, '');
+  let id = null;
+  if (host === 'youtu.be') {
+    id = url.pathname.slice(1).split('/')[0];
+  } else if (host === 'youtube.com' || host === 'music.youtube.com' || host === 'youtube-nocookie.com') {
+    if (url.pathname === '/watch') {
+      id = url.searchParams.get('v');
+    } else {
+      const m = url.pathname.match(/^\/(?:embed|shorts|live|v)\/([^/]+)/);
+      if (m) id = m[1];
+    }
+  }
+  return id && VIDEO_ID.test(id) ? id : null;
 }
 
-/**
- * Fetch video details (Title, Channel Name, Thumbnail, Published Date)
- * @param {string} videoId 
- * @returns {Promise<object>}
- */
-async function fetchVideoDetails(videoId) {
-  if (!API_KEY) {
-    throw new Error('YOUTUBE_API_KEY is not defined in environment variables.');
-  }
-
-  const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${API_KEY}`;
-  
-  const response = await fetch(url);
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error?.message || 'Failed to fetch video details');
-  }
-
-  const data = await response.json();
-  if (!data.items || data.items.length === 0) {
-    throw new Error('Video not found or is private');
-  }
-
-  const snippet = data.items[0].snippet;
-  return {
-    id: videoId,
-    title: snippet.title,
-    channel_title: snippet.channelTitle,
-    thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.default?.url,
-    published_at: snippet.publishedAt
-  };
-}
-
-/**
- * Fetch comment threads for a video
- * @param {string} videoId 
- * @param {number} maxComments - Maximum comments to fetch (to protect quotas)
- * @returns {Promise<Array>} - List of comments
- */
-async function fetchComments(videoId, maxComments = 200) {
-  if (!API_KEY) {
-    throw new Error('YOUTUBE_API_KEY is not defined in environment variables.');
-  }
-
-  let comments = [];
-  let nextPageToken = '';
-  let fetchedCount = 0;
-
-  // Loop to handle pagination until we reach maxComments or run out of comments
-  while (fetchedCount < maxComments) {
-    const limit = Math.min(100, maxComments - fetchedCount);
-    let url = `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=${limit}&textFormat=plainText&key=${API_KEY}`;
-    
-    if (nextPageToken) {
-      url += `&pageToken=${nextPageToken}`;
+function createYoutubeService({ apiKey, fetchImpl = (...args) => globalThis.fetch(...args), timeoutMs = 15000 }) {
+  async function call(path, params) {
+    const qs = new URLSearchParams({ ...params, key: apiKey });
+    let res;
+    try {
+      res = await fetchImpl(`${API_BASE}/${path}?${qs}`, { signal: AbortSignal.timeout(timeoutMs) });
+    } catch {
+      // The raw error can contain the request URL (which includes the API key), so it is not kept as `cause`.
+      throw new AppError(502, 'Could not reach YouTube. Please try again.');
     }
+    if (res.ok) return res.json();
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || 'Failed to fetch comments');
+    let body = null;
+    try { body = await res.json(); } catch { /* non-JSON error body */ }
+    const reason = body?.error?.errors?.[0]?.reason;
+    if (reason === 'commentsDisabled') {
+      throw new AppError(400, 'Comments are disabled for this YouTube video.', { code: 'COMMENTS_DISABLED' });
     }
-
-    const data = await response.json();
-    if (!data.items || data.items.length === 0) break;
-
-    const parsedComments = data.items.map(item => {
-      const snippet = item.snippet.topLevelComment.snippet;
-      return {
-        id: item.snippet.topLevelComment.id,
-        video_id: videoId,
-        author_name: snippet.authorDisplayName,
-        author_profile_image: snippet.authorProfileImageUrl,
-        text: snippet.textDisplay,
-        like_count: snippet.likeCount || 0,
-        published_at: snippet.publishedAt
-      };
+    if (reason === 'videoNotFound' || res.status === 404) {
+      throw new AppError(404, 'This video is private or does not exist.', { code: 'VIDEO_NOT_FOUND' });
+    }
+    if (reason === 'quotaExceeded' || reason === 'dailyLimitExceeded') {
+      throw new AppError(503, 'The YouTube API quota is used up for today. Please try again later.', { code: 'YOUTUBE_QUOTA' });
+    }
+    throw new AppError(502, 'YouTube returned an error. Please try again.', {
+      cause: new Error(`YouTube HTTP ${res.status}: ${body?.error?.message || 'unknown'}`),
     });
-
-    comments = comments.concat(parsedComments);
-    fetchedCount += parsedComments.length;
-    
-    nextPageToken = data.nextPageToken;
-    if (!nextPageToken) break; // No more comments
   }
 
-  return comments;
+  async function fetchVideoDetails(videoId) {
+    const data = await call('videos', { part: 'snippet', id: videoId });
+    if (!data.items || data.items.length === 0) {
+      throw new AppError(404, 'This video is private or does not exist.', { code: 'VIDEO_NOT_FOUND' });
+    }
+    const s = data.items[0].snippet;
+    return {
+      id: videoId,
+      title: s.title,
+      channel_title: s.channelTitle,
+      thumbnail: s.thumbnails?.high?.url || s.thumbnails?.default?.url || null,
+      published_at: s.publishedAt,
+    };
+  }
+
+  async function fetchComments(videoId, maxComments = 300) {
+    const comments = [];
+    let pageToken;
+    while (comments.length < maxComments) {
+      const params = {
+        part: 'snippet',
+        videoId,
+        maxResults: String(Math.min(100, maxComments - comments.length)),
+        order: 'relevance',
+        textFormat: 'plainText',
+      };
+      if (pageToken) params.pageToken = pageToken;
+
+      const data = await call('commentThreads', params);
+      if (!data.items || data.items.length === 0) break;
+
+      for (const item of data.items) {
+        const s = item.snippet.topLevelComment.snippet;
+        comments.push({
+          id: item.snippet.topLevelComment.id,
+          video_id: videoId,
+          author_name: s.authorDisplayName,
+          author_profile_image: s.authorProfileImageUrl || null,
+          text: s.textDisplay,
+          like_count: s.likeCount || 0,
+          published_at: s.publishedAt,
+        });
+      }
+      pageToken = data.nextPageToken;
+      if (!pageToken) break;
+    }
+    return comments;
+  }
+
+  return { fetchVideoDetails, fetchComments };
 }
 
-module.exports = {
-  extractVideoId,
-  fetchVideoDetails,
-  fetchComments
-};
+module.exports = { extractVideoId, createYoutubeService };

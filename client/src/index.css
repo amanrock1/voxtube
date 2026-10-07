@@ -1291,3 +1291,28 @@ body::before{
 }
 
 
+
+/* Marks landing-page mock-ups as examples, not real data. */
+.example-tag {
+  display: inline-block;
+  margin-bottom: 0.6rem;
+  padding: 0.1rem 0.5rem;
+  border: 1px dashed var(--text-3);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* Letter avatar used when a profile picture is missing or fails to load. */
+.comment-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
