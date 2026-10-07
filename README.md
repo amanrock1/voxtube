@@ -22,20 +22,20 @@
 
 YouTube creators, community managers, and brands face a massive scale problem. A single video can attract thousands of comments. Within this sea of text lies invaluable feedback, product suggestions, business inquiries, and bugs. Unfortunately, it is drowned out by link spam, self-promotion, bot rings, and low-effort noise.
 
-**VoxTube** is an enterprise-grade analytics engine designed to extract signal from this noise in seconds. By connecting the **YouTube Data API v3** and **Reddit Data Ingestion** with **Google Gemini AI**, VoxTube aggregates, classifies, and summarizes audience feedback. It transforms thousands of lines of text into structured, actionable insights for content strategy and business growth.
+**VoxTube** is an analytics tool designed to extract signal from this noise, usually within a minute. By connecting the **YouTube Data API v3** and **Reddit Data Ingestion** with **Google Gemini AI**, VoxTube aggregates, classifies, and summarizes audience feedback. It transforms thousands of lines of text into structured, actionable insights for content strategy and business growth.
 
 ### Key Value Props
 
 - **Instant Sentiment Analysis:** No more scrolling for hours. Instantly read the emotional pulse (Positive, Neutral, Negative) of your audience.
 - **Smart Intent Categorization:** Comments are automatically tagged as **Praise**, **Question**, **Feedback/Bug**, or **Noise** using zero-shot AI classification.
-- **Quota-Friendly Intelligent Cache:** Implements server-side PostgreSQL caching via Supabase to deliver sub-50ms repeat loads and eliminate costly API overruns.
-- **Premium Creator UX:** A high-fidelity, responsive dark-mode dashboard with custom glassmorphism components, particle systems, and interactive data charts.
+- **Quota-Friendly Intelligent Cache:** Implements server-side PostgreSQL caching via Supabase so repeat requests are served from the database instead of calling the YouTube and Gemini APIs again (records are refreshed after 7 days).
+- **Creator-friendly Dashboard:** A responsive dark-mode dashboard with interactive charts and a searchable, filterable comment feed.
 
 ---
 
 ## System Interface & Screenshots
 
-Here are previews of the VoxTube interface designed with modern CSS-first glassmorphism principles.
+Here are previews of the VoxTube interface.
 
 ### 1. Landing Page
 
@@ -74,11 +74,11 @@ Here are previews of the VoxTube interface designed with modern CSS-first glassm
 ## Features
 
 - [x] **Dual Source Ingestion:** Seamless support for both YouTube Video URLs and Reddit Thread URLs.
-- [x] **Zero-Shot AI Pipeline:** Multi-comment batching using the `gemini-2.5-flash-lite` model for sentiment analysis and intent classification.
+- [x] **Zero-Shot AI Pipeline:** Batched classification (50 comments per request) with `gemini-2.5-flash-lite`, falling back to `gemini-2.5-flash`. Answers are validated; a failed analysis is never saved.
 - [x] **AI-Generated Executive Summary:** Generates structured markdown summaries containing _General Consensus_, _Top Loves_, and _Critiques/Issues_.
 - [x] **Dynamic Interactive Feed:** Search comment contents and toggle filter pills (e.g. view only "Questions" or only "Negative" sentiment comments) in real-time.
 - [x] **Visual Analytics:** Fully responsive Pie and Bar charts powered by Recharts representing categories and sentiment distributions.
-- [x] **10-Point Security Hardening:** Restrictive CORS allowlists, Helmet HTTP headers, IP-based API rate limiting, body size filters, and protected error handlers.
+- [x] **Security Hardening:** Turnstile CAPTCHA, CORS allowlist and Origin checks, rate limiting that runs before the CAPTCHA, Helmet headers, body size limits, and masked error messages.
 
 ---
 
@@ -86,13 +86,13 @@ Here are previews of the VoxTube interface designed with modern CSS-first glassm
 
 | Layer         | Technology                                  | Purpose                                                                                             |
 | :------------ | :------------------------------------------ | :-------------------------------------------------------------------------------------------------- |
-| **Frontend**  | React 19, Vite 8, Lucide React              | Modern SPA architecture with rapid HMR and lightweight bundle size.                                 |
-| **Styling**   | Vanilla CSS (CSS Variables)                 | Ultra-fast rendering, zero compiler overhead, custom glassmorphism and custom scrollbars.           |
+| **Frontend**  | React 19, Vite 8                            | Modern SPA architecture with rapid HMR and lightweight bundle size.                                 |
+| **Styling**   | Vanilla CSS (CSS Variables)                 | No CSS framework or build-time compiler; design tokens as CSS variables.                            |
 | **Charts**    | Recharts (React Wrapper)                    | Dynamic, responsive SVG rendering for sentiment/category analytics.                                 |
 | **Backend**   | Node.js, Express                            | Event-driven REST API server handling request validation and service orchestration.                 |
 | **Database**  | Supabase (PostgreSQL)                       | Relational database housing comment records, indexing querying paths, and managing API credentials. |
 | **AI Engine** | Google Gemini API (`@google/generative-ai`) | Zero-shot comment classification and context-aware markdown summarizing.                            |
-| **Security**  | Helmet, Express Rate Limit                  | API route protection, malicious payload mitigation, and script blocking.                            |
+| **Security**  | Turnstile, Helmet, Express Rate Limit       | API route protection, malicious payload mitigation, and script blocking.                            |
 
 ---
 
@@ -111,23 +111,23 @@ sequenceDiagram
     participant AI as Gemini API Engine
 
     Creator->>API: POST /api/analyze { url, turnstileToken }
-    API->>API: Validate URL format & rate limits
+    API->>API: Check Origin, then rate limit (per IP)
     API->>CF: POST /siteverify (Verify CAPTCHA token)
     CF-->>API: Return success status
     API->>DB: Check Cache: SELECT * FROM videos WHERE id = videoId
-    alt Cache Hit (Healthy Record)
+    alt Cache Hit (Fresh, Healthy Record)
         DB-->>API: Return cached video + comments
-        API-->>Creator: Send 200 OK (Loaded in <50ms)
-    else Cache Miss / Corrupted Record
+        API-->>Creator: Send 200 OK (served from the database)
+    else Cache Miss / Stale / Corrupted Record
         API->>YT: Fetch video metadata & paginated comments (max 300)
         YT-->>API: Return raw payload
-        API->>AI: Send comments in optimized compression format
+        API->>AI: Send comments in batches of 50 (short numeric ids)
         AI-->>API: Return structured JSON classifications
         API->>AI: Request high-level markdown summary
         AI-->>API: Return markdown summary
         API->>DB: Write Cache: INSERT video & analyzed comments
         DB-->>API: Confirm database commit
-        API-->>Creator: Send 200 OK (Loaded in 3-5s)
+        API-->>Creator: Send 200 OK 
     end
 ```
 
@@ -137,30 +137,31 @@ sequenceDiagram
 
 ```text
 you-tube-project/
-├── client/                      # React SPA Frontend (Vite)
-│   ├── public/                  # Static assets & favicon
+├── client/                        # React SPA (Vite)
 │   ├── src/
-│   │   ├── components/          # Dashboard, Loading skeleton, and Particle canvas components
-│   │   ├── App.jsx              # Application state and screen manager
-│   │   ├── App.css              # Glassmorphic component styles
-│   │   ├── index.css            # Base stylesheet containing color variables & typography
-│   │   └── main.jsx             # Entry point
-│   ├── .env                     # Client environment configuration
+│   │   ├── components/            # Landing, Dashboard, CommentFeed, Charts, Icons, ...
+│   │   ├── hooks/                 # useCounter, useScramble, useVisits, useCursorGlow
+│   │   ├── lib/                   # api.js (server calls), stats.js (chart data), samples.js, unit tests
+│   │   ├── App.jsx                # State and screen manager
+│   │   ├── index.css              # Styles and design tokens
+│   │   └── main.jsx               # Entry point
+│   ├── .env.example               # Client environment template
 │   └── vite.config.js
 │
-├── server/                      # Node.js REST API Backend
+├── server/                        # Node.js REST API
 │   ├── src/
-│   │   ├── database/
-│   │   │   └── seed.js          # Mock database seeder for keyless development
-│   │   ├── services/
-│   │   │   ├── aiService.js     # Handles Gemini classifications & markdown summaries
-│   │   │   ├── redditService.js # Handles Reddit HTML scraping & parsing
-│   │   │   └── youtubeService.js# Handles YouTube comment fetching & pagination
-│   │   ├── utils/
-│   │   │   └── supabase.js      # Supabase Client configuration
-│   │   └── index.js             # Main server entry with security middlewares
-│   ├── .env.example             # Sample environment configuration template
-│   └── package.json
+│   │   ├── config.js              # Environment validation (fails fast)
+│   │   ├── app.js                 # Express app: middleware order and routes
+│   │   ├── index.js               # Bootstrap
+│   │   ├── middleware/            # CORS/Origin policy, Turnstile, rate limits, error handling
+│   │   ├── routes/                # /api/analyze, /api/videos
+│   │   ├── services/              # youtube, reddit, ai (Gemini), analysis (pipeline + cache)
+│   │   ├── utils/                 # AppError, withRetry, cache policy, Supabase client
+│   │   └── database/              # schema.sql, seed.js (demo data only)
+│   ├── scripts/purge-bad-cache.js # Finds/deletes corrupt cached analyses (dry run by default)
+│   ├── test/                      # node:test suites
+│   └── .env.example
+└── docs/                          # Screenshots, design spec and implementation plan
 ```
 
 ---
@@ -169,7 +170,7 @@ you-tube-project/
 
 ### Prerequisites
 
-- **Node.js** (v18.x or higher)
+- **Node.js** (v22 or higher)
 - **npm** (v10.x or higher)
 - **Supabase** account (Free tier is perfect)
 - **Google AI Studio API Key** (Free tier)
@@ -198,49 +199,13 @@ cd voxtube
    ```
 4. Fill in the variables in `.env` (details in [Environment Variables](#-environment-variables)).
 
-#### Database Schema setup:
+#### Database setup
 
-Execute the following schema in your **Supabase SQL Editor** to create the tables and optimized indices:
+Run [`server/src/database/schema.sql`](server/src/database/schema.sql) in the **Supabase SQL Editor**. It creates the tables and indexes and enables Row Level Security. It is safe to re-run.
 
-```sql
--- Create Videos Table
-CREATE TABLE videos (
-    id VARCHAR(255) PRIMARY KEY,
-    title TEXT NOT NULL,
-    channel_title VARCHAR(255) NOT NULL,
-    thumbnail TEXT,
-    published_at TIMESTAMP WITH TIME ZONE,
-    summary TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+#### Demo data (optional)
 
--- Create Comments Table
-CREATE TABLE comments (
-    id VARCHAR(255) PRIMARY KEY,
-    video_id VARCHAR(255) REFERENCES videos(id) ON DELETE CASCADE,
-    author_name VARCHAR(255) NOT NULL,
-    author_profile_image TEXT,
-    text TEXT NOT NULL,
-    like_count INTEGER DEFAULT 0,
-    published_at TIMESTAMP WITH TIME ZONE,
-    sentiment VARCHAR(50) NOT NULL,
-    category VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Create Indexes for Query Optimization
-CREATE INDEX idx_comments_video_id ON comments(video_id);
-CREATE INDEX idx_comments_sentiment ON comments(sentiment);
-CREATE INDEX idx_comments_category ON comments(category);
-```
-
-#### Run Database Seed (Optional)
-
-If you don't have active YouTube/Gemini API keys, you can populate the database with Rick Astley mockup data to test the UI offline:
-
-```bash
-node src/database/seed.js
-```
+`npm run seed -- --yes` inserts one clearly labelled demo record (`demo_seed`) so you can preview the data shape via `GET /api/videos/demo_seed`. It never uses a real video id and refuses to run when `NODE_ENV=production`.
 
 5. Start the backend server:
    ```bash
@@ -258,13 +223,12 @@ node src/database/seed.js
    ```bash
    npm install
    ```
-3. Create a `.env` file:
+3. Create a `.env` file from the template and add your Turnstile **site** key:
    ```bash
-   echo "VITE_API_URL=http://localhost:5000" > .env
-   echo "VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA" >> .env
+   cp .env.example .env
    ```
    > [!IMPORTANT]
-   > The dummy Turnstile key `1x00000000000000000000AA` will always pass locally for development. For production, you must use a real Sitekey from your Cloudflare dashboard.
+   > Cloudflare's test keys (site key `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`) always pass, so they are only suitable for local development. Production needs real keys from your Cloudflare dashboard; the server refuses to start in production without a Turnstile secret.
 4. Start the frontend Vite application:
    ```bash
    npm run dev
@@ -275,20 +239,41 @@ node src/database/seed.js
 
 ## Environment Variables
 
-### Backend (`server/.env`)
+### Backend (`server/.env`, template: `server/.env.example`)
 
-- `PORT`: The port the Express server will listen on (default `5000`).
-- `SUPABASE_URL`: Your Supabase Project API URL (found under Project Settings -> API).
-- `SUPABASE_KEY`: Your Supabase `service_role` Key (Requires admin privileges to bypass RLS).
-- `GEMINI_API_KEY`: API key generated from Google AI Studio.
-- `YOUTUBE_API_KEY`: API key generated from the Google Cloud Platform Console.
-- `TURNSTILE_SECRET_KEY`: Your Cloudflare Turnstile Secret Key used to verify CAPTCHA tokens.
-- `FRONTEND_URL` _(Optional)_: The URL of your hosted React application to configure production CORS.
+- `NODE_ENV`: Set `development` locally (allows localhost origins; skips the CAPTCHA if no secret is set). Leave unset or `production` when deployed.
+- `PORT`: Port the Express server listens on (default `5000`).
+- `SUPABASE_URL`: Your Supabase Project URL (Project Settings -> API).
+- `SUPABASE_KEY`: Your Supabase `service_role` / secret key (bypasses RLS; keep it server-side only).
+- `GEMINI_API_KEY`: API key from Google AI Studio.
+- `GEMINI_MODEL` _(Optional)_: Primary model (default `gemini-2.5-flash-lite`).
+- `GEMINI_FALLBACK_MODEL` _(Optional)_: Fallback model (default `gemini-2.5-flash`).
+- `YOUTUBE_API_KEY`: API key with the YouTube Data API v3 enabled.
+- `TURNSTILE_SECRET_KEY`: Cloudflare Turnstile secret key. Required unless `NODE_ENV=development`.
+- `FRONTEND_URL` _(Required in production)_: Your deployed frontend origin(s), comma separated, no trailing slash.
 
-### Frontend (`client/.env`)
+### Frontend (`client/.env`, template: `client/.env.example`)
 
-- `VITE_API_URL`: The URL of your Express API backend.
-- `VITE_TURNSTILE_SITE_KEY`: Your Cloudflare Turnstile public Sitekey.
+- `VITE_TURNSTILE_SITE_KEY`: Your Cloudflare Turnstile public site key. The analyzer is disabled without it.
+- `VITE_API_URL` _(Optional in development)_: Your API origin. Defaults to `http://localhost:5000` in development. Set it on your hosting platform for production.
+
+---
+
+## Testing
+
+```bash
+cd server && npm test     # URL parsing, Reddit parsing, AI validation, cache policy, pipeline, middleware, routes
+cd client && npm test     # API client and chart-statistics helpers
+cd client && npm run lint
+```
+
+## Maintenance
+
+```bash
+cd server
+npm run purge-cache             # dry run: lists corrupt cached analyses
+npm run purge-cache -- --apply  # deletes them (they are re-analysed on the next request)
+```
 
 ---
 
@@ -296,37 +281,31 @@ node src/database/seed.js
 
 ### 1. The Daily Quota Crisis ("Why is everything Noise?")
 
-- **Challenge:** During validation tests using the experimental `@google/genai` SDK with `gemini-2.5-flash`, the application silently started classifying all comments as "Noise/Spam" after 3–4 URL queries. The server did not crash, but the UI summary stayed at "still generating..." indefinitely.
-- **Root Cause:** The Google free tier for the experimental SDK model had a strict quota limit of **20 requests per day**. When the quota was exhausted, the API returned `429 RESOURCE_EXHAUSTED`. The backend caught this error silently, mapped the fallback comments list as "Noise" (to prevent a crash), and _saved those broken results to the Supabase cache_. Subsequent requests loaded this corrupted cache.
+- **Challenge:** During early testing the application silently started classifying all comments as "Noise/Spam" after a few URL queries. The server did not crash, but the results were useless.
+- **Root Cause:** When the Gemini quota was exhausted or the model call failed, the backend caught the error silently, filled every comment with a default "Neutral / Noise" label (to avoid a crash), and _saved those fake results to the Supabase cache_. Later requests then loaded the corrupted cache.
 - **Resolution:**
-  1. Migrated the code to the stable production-grade `@google/generative-ai` SDK and switched the model to `gemini-2.5-flash-lite`, increasing the free tier ceiling to **1,500 requests per day** (a 75x capacity increase).
-  2. Refactored the processing code to self-heal: if the server detects a cache hit containing a corrupted or error summary, it automatically purges the video from PostgreSQL and forces a fresh, clean API ingestion run.
+  1. The AI service never invents labels now. If Gemini cannot classify a batch (after retries and a fallback model), the request fails with a clear error and **nothing is saved**.
+  2. Models are pinned (`gemini-2.5-flash-lite`, falling back to `gemini-2.5-flash`) instead of the moving `*-latest` aliases, and are configurable through environment variables.
+  3. Cached records are validated on every hit. Failed summaries, records older than 7 days, empty records, and the "all Neutral/Noise" signature of the old bug are discarded and re-analysed automatically. `npm run purge-cache` lists them without deleting anything.
 
-### 2. Token Compaction & Latency Optimization
+### 2. Reliable AI Output
 
-- **Challenge:** Sequential classification loops for batches of comments resulted in API latencies of over 12 seconds per video. However, executing 6 parallel batches using `Promise.all()` triggered burst-rate limits (429) at Google AI Studio.
+- **Challenge:** LLM answers can be incomplete, malformed, or contain unexpected labels, and long YouTube comment ids are easy for a model to corrupt.
 - **Resolution:**
-  1. We optimized the prompt structure. Instead of instructing the LLM to return verbose JSON blocks like `{"id": "c1", "sentiment": "Positive", "category": "Question"}`, we used array-based code mappings: `["c1", "POS", "Q"]`.
-  2. This compression reduced outbound token payload by **75%**, allowing us to process up to 300 comments in a single API call safely under rate limits, dropping processing times to under 3 seconds.
+  1. Comments are sent in batches of 50, labelled with short numeric ids (`0, 1, 2…`) that are mapped back to the real comment ids on the server.
+  2. Every answer is validated: valid JSON, a known sentiment and category code for every comment, and no skipped items. A bad answer is retried with exponential backoff and then falls back to a second model.
+  3. Batches run sequentially to stay under free-tier rate limits.
 
-### 3. Production Security Audit
+### 3. Security Hardening
 
-- **Challenge:** Express servers with default settings are vulnerable to body-stuffing attacks, clickjacking, and open-CORS vulnerability leaks.
-- **Resolution:** Added 10 security layers:
-  - Configured CORS with origin checking using an allowlist.
-  - Implemented `express-rate-limit` allowing a max of 30 analytics calls per 15 minutes per IP.
-  - Added input validators on the POST body restricting URL queries to strings under 500 characters.
-  - Integrated `helmet` middleware setting 11 HTTP security headers.
-  - Limited the JSON body parsing size to a strict `10kb` limit to prevent memory exhaustion.
-  - Prevented information disclosure by masking database stack traces and internal API details from returning to client response payloads.
-
----
-
-## Key Learnings
-
-- **Defensive Caching Design:** Database caches must include validation and auto-healing logic; caching a broken fallback response is worse than not caching at all.
-- **Token Budget Management:** Structural choices in prompt JSON formats have massive impacts on network latency and API charges. Keep formats minimal.
-- **Security First:** Writing secure code doesn't require complex rewrites. Strategic placement of middleware like Helmet and rate limiters secures an Express server against 90% of common automated scripts.
+- **Challenge:** Express servers with default settings are vulnerable to body-stuffing, clickjacking, open CORS, and quota abuse.
+- **Resolution:**
+  - Cloudflare Turnstile CAPTCHA on `/api/analyze`. It fails closed in production: the server will not start without a secret.
+  - The rate limiter (`express-rate-limit`, 30 analyses per 15 minutes per IP) runs _before_ the CAPTCHA check, so failed attempts are counted too. Read endpoints have their own limiter.
+  - CORS allowlist from `FRONTEND_URL`, plus an Origin check that blocks other websites from using the API from a browser (it is not authentication: the CAPTCHA and rate limit are the real gate). Localhost is only trusted when `NODE_ENV=development`.
+  - Input validation (string URLs under 500 characters), a `10kb` JSON body limit, and `helmet` security headers.
+  - Internal errors are masked: users see friendly messages, details go to the server log only.
+  - Identical concurrent requests share one analysis, so a double-click does not cost two.
 
 ---
 

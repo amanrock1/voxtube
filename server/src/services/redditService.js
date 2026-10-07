@@ -1,190 +1,104 @@
-const dotenv = require('dotenv');
 const cheerio = require('cheerio');
-dotenv.config();
+const { AppError } = require('../utils/errors');
 
-/**
- * Helper to extract Reddit Post ID and Subreddit from various URL formats
- * @param {string} url - Reddit URL
- * @returns {object|null} - { id, subreddit } or null
- */
+const MAX_REPLIES_PER_SOLUTION = 5;
+const MAX_TOTAL_COMMENTS = 150;
+const REDDIT_URL = /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)?reddit\.com\/r\/([^/?#]+)\/comments\/([a-z0-9]+)/i;
+
+const REQUEST_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+
 function extractRedditInfo(url) {
-  if (!url) return null;
-  const regExp = /reddit\.com\/r\/([^/]+)\/comments\/([^/]+)/i;
-  const match = url.match(regExp);
-  if (match) {
-    return {
-      subreddit: match[1],
-      id: match[2]
-    };
-  }
-  return null;
+  if (typeof url !== 'string') return null;
+  const m = url.trim().match(REDDIT_URL);
+  return m ? { subreddit: m[1], id: m[2] } : null;
 }
 
-/**
- * Clean up HTML entities in extracted text strings
- * @param {string} str - Raw string with HTML entities
- * @returns {string} - Cleaned string
- */
-function decodeHtmlEntities(str) {
-  if (!str) return '';
-  return str
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x2F;/g, '/')
-    .replace(/&nbsp;/g, ' ');
+function readComment($, el, parentId) {
+  const $el = $(el);
+  const id = $el.attr('data-fullname')?.replace('t1_', '') || $el.attr('id')?.replace('thing_t1_', '');
+  const author = $el.attr('data-author') || '[deleted]';
+  const text = $el.find('> .entry > .usertext > .usertext-body > .md').first().text().trim();
+  if (!id || author === '[deleted]' || !text) return null;
+
+  const likes = parseInt($el.find('> .entry > .tagline > .score.unvoted').first().attr('title'), 10);
+  return {
+    id,
+    author_name: author,
+    author_profile_image: null,
+    text,
+    like_count: Number.isFinite(likes) ? likes : 0,
+    published_at: $el.find('> .entry > .tagline > time').first().attr('datetime') || null,
+    parent_id: parentId,
+  };
 }
 
-/**
- * Fetch post details and comments from a Reddit thread via old.reddit.com scraper
- * Bypasses API key requirements and Varnish blocks.
- * @param {string} rawUrl 
- * @returns {Promise<object>} - { postDetails, comments }
- */
-async function fetchRedditThread(rawUrl, _redirectDepth = 0) {
-  const info = extractRedditInfo(rawUrl);
-  if (!info) {
-    throw new Error('Invalid Reddit Post URL format');
-  }
-
-  // Fetch using the short url path on old.reddit.com to prevent 404s
-  const oldRedditUrl = `https://old.reddit.com/comments/${info.id}`;
-  console.log(`Scraping Reddit page: ${oldRedditUrl}`);
-
-  // \u2500\u2500\u2500 SECURITY: 3-minute timeout \u2014 prevents server hanging forever if Reddit is slow/down
-  const controller = new AbortController();
-  const fetchTimeout = setTimeout(() => controller.abort(), 3 * 60 * 1000); // 3 minutes
-
-  let response;
-  try {
-    response = await fetch(oldRedditUrl, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
-      }
-    });
-  } catch (err) {
-    clearTimeout(fetchTimeout);
-    if (err.name === 'AbortError') {
-      throw new Error('Reddit fetch timed out after 3 minutes. The thread may be too large or Reddit is slow.');
-    }
-    throw err;
-  }
-  clearTimeout(fetchTimeout);
-
-  if (!response.ok) {
-    throw new Error(`Failed to scrape Reddit thread (HTTP ${response.status})`);
-  }
-
-  const html = await response.text();
-  if (html.includes('301 Moved Permanently')) {
-    // \u2500\u2500\u2500 SECURITY: Limit redirect hops to prevent infinite recursion / stack overflow \u2500
-    if (_redirectDepth >= 3) {
-      throw new Error('Too many redirects while fetching Reddit thread.');
-    }
-    const redirectMatch = html.match(/href="([^"]+)"/);
-    if (redirectMatch) {
-      return fetchRedditThread(redirectMatch[1], _redirectDepth + 1);
-    }
-  }
-
+/** Pure HTML -> data. Comment ids and parent ids are raw Reddit ids. */
+function parseThread(html, info) {
   const $ = cheerio.load(html);
-
-  // 1. Extract Post Title
-  const titleText = $('a.title').first().text().trim();
-  const title = titleText ? decodeHtmlEntities(titleText) : 'Unknown Reddit Post';
+  if ($('.nestedlisting').length === 0 && $('a.title').length === 0) {
+    throw new AppError(502, 'Could not read this Reddit page. Reddit may have blocked the request.', { code: 'REDDIT_UNREADABLE' });
+  }
 
   const postDetails = {
     id: info.id,
-    title,
+    title: $('a.title').first().text().trim() || 'Unknown Reddit Post',
     channel_title: `r/${info.subreddit}`,
     thumbnail: 'https://www.redditstatic.com/icon.png',
-    published_at: new Date().toISOString()
+    published_at: $('#siteTable .tagline time').first().attr('datetime') || null,
   };
 
-  // 2. Parse Comments using structured hierarchy
-  const commentsList = [];
-  const MAX_REPLIES_PER_SOLUTION = 5; // Capping replies per solution to preserve budget (Option A)
-  const MAX_TOTAL_COMMENTS = 150;
+  const comments = [];
+  $('.sitetable.nestedlisting > .comment').each((_, rootEl) => {
+    if (comments.length >= MAX_TOTAL_COMMENTS) return false;
+    const root = readComment($, rootEl, null);
+    if (!root) return;
+    comments.push(root);
 
-  // Find all top-level comments (proposed solutions)
-  const rootComments = $('.sitetable.nestedlisting > .comment');
-  console.log(`Found ${rootComments.length} root comments in thread.`);
-
-  rootComments.each((index, rootEl) => {
-    if (commentsList.length >= MAX_TOTAL_COMMENTS) return false;
-
-    const rootId = $(rootEl).attr('data-fullname')?.replace('t1_', '') || $(rootEl).attr('id')?.replace('thing_t1_', '');
-    const rootAuthor = $(rootEl).attr('data-author') || '[deleted]';
-    
-    // Extract text
-    const rootText = decodeHtmlEntities($(rootEl).find('> .entry > .usertext > .usertext-body > .md').first().text().trim());
-    
-    // Extract score
-    const scoreText = $(rootEl).find('> .entry > .tagline > .score.unvoted').first().attr('title') || '0';
-    const rootLikes = parseInt(scoreText) || 0;
-    
-    // Extract time
-    const rootTime = $(rootEl).find('> .entry > .tagline > time').first().attr('datetime') || new Date().toISOString();
-
-    if (rootAuthor !== '[deleted]' && rootText.length > 0 && rootId) {
-      commentsList.push({
-        id: rootId,
-        video_id: info.id,
-        author_name: rootAuthor,
-        author_profile_image: `https://www.redditstatic.com/avatars/defaults/v2/avatar_default_${Math.abs(rootAuthor.charCodeAt(0) || 0) % 5}.png`,
-        text: rootText,
-        like_count: rootLikes,
-        published_at: rootTime,
-        parent_id: null // Top-level comment
-      });
-
-      // Find child comments (direct replies to this solution - Option C)
-      const childComments = $(rootEl).find('> .child > .sitetable > .comment');
-      let replyCount = 0;
-
-      childComments.each((cIndex, childEl) => {
-        if (replyCount >= MAX_REPLIES_PER_SOLUTION || commentsList.length >= MAX_TOTAL_COMMENTS) return false;
-
-        const childId = $(childEl).attr('data-fullname')?.replace('t1_', '') || $(childEl).attr('id')?.replace('thing_t1_', '');
-        const childAuthor = $(childEl).attr('data-author') || '[deleted]';
-        const childText = decodeHtmlEntities($(childEl).find('> .entry > .usertext > .usertext-body > .md').first().text().trim());
-        const childScoreText = $(childEl).find('> .entry > .tagline > .score.unvoted').first().attr('title') || '0';
-        const childLikes = parseInt(childScoreText) || 0;
-        const childTime = $(childEl).find('> .entry > .tagline > time').first().attr('datetime') || new Date().toISOString();
-
-        if (childAuthor !== '[deleted]' && childText.length > 0 && childId) {
-          commentsList.push({
-            id: childId,
-            video_id: info.id,
-            author_name: childAuthor,
-            author_profile_image: `https://www.redditstatic.com/avatars/defaults/v2/avatar_default_${Math.abs(childAuthor.charCodeAt(0) || 0) % 5}.png`,
-            text: childText,
-            like_count: childLikes,
-            published_at: childTime,
-            parent_id: rootId // References the solution
-          });
-          replyCount++;
-        }
-      });
-    }
+    let replies = 0;
+    $(rootEl).find('> .child > .sitetable > .comment').each((__, childEl) => {
+      if (replies >= MAX_REPLIES_PER_SOLUTION || comments.length >= MAX_TOTAL_COMMENTS) return false;
+      const child = readComment($, childEl, root.id);
+      if (!child) return;
+      comments.push(child);
+      replies++;
+    });
   });
 
-  console.log(`Successfully scraped and parsed ${commentsList.length} comments using Cheerio hierarchy.`);
-
-  return {
-    postDetails,
-    comments: commentsList
-  };
+  return { postDetails, comments };
 }
 
-module.exports = {
-  extractRedditInfo,
-  fetchRedditThread
-};
+function createRedditService({ fetchImpl = (...args) => globalThis.fetch(...args), timeoutMs = 20000 } = {}) {
+  async function fetchRedditThread(url) {
+    const info = extractRedditInfo(url);
+    if (!info) throw new AppError(400, 'Invalid Reddit post URL.');
+
+    let res;
+    try {
+      res = await fetchImpl(`https://old.reddit.com/comments/${info.id}`, {
+        headers: REQUEST_HEADERS,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (err) {
+      if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+        throw new AppError(504, 'Reddit took too long to respond. Please try again.', { cause: err });
+      }
+      throw new AppError(502, 'Could not reach Reddit. Please try again.', { cause: err });
+    }
+
+    if (res.status === 403 || res.status === 429) {
+      throw new AppError(502, 'Reddit blocked the request from this server. Try again later, or analyze a YouTube link.', { code: 'REDDIT_BLOCKED' });
+    }
+    if (res.status === 404) throw new AppError(404, 'This Reddit thread was not found.');
+    if (!res.ok) throw new AppError(502, `Reddit returned an error (HTTP ${res.status}). Please try again.`);
+
+    return parseThread(await res.text(), info);
+  }
+
+  return { fetchRedditThread };
+}
+
+module.exports = { extractRedditInfo, parseThread, createRedditService };

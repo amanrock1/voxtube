@@ -5,10 +5,12 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "test": "node --test \"test/**/*.test.js\"",
+    "purge-cache": "node scripts/purge-bad-cache.js",
+    "seed": "node src/database/seed.js"
   },
   "dependencies": {
-    "@google/genai": "^0.2.0",
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.39.8",
     "cheerio": "^1.2.0",
@@ -20,5 +22,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

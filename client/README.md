@@ -1,16 +1,37 @@
-# React + Vite
+# VoxTube client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + Vite single-page app for [VoxTube](../README.md). It sends a YouTube or Reddit URL (plus a Cloudflare Turnstile token) to the API and renders the sentiment charts, AI summary and filterable comment feed.
 
-Currently, two official plugins are available:
+## Run it
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+cp .env.example .env     # then set VITE_TURNSTILE_SITE_KEY
+npm install
+npm run dev              # http://localhost:5173
+```
 
-## React Compiler
+The API must be running too (see `../server`). In development the client calls `http://localhost:5000` unless `VITE_API_URL` is set.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Scripts
 
-## Expanding the ESLint configuration
+| Command | What it does |
+| :-- | :-- |
+| `npm run dev` | Vite dev server with hot reload |
+| `npm run build` | Production build into `dist/` |
+| `npm run preview` | Serve the production build locally |
+| `npm run lint` | ESLint |
+| `npm test` | Unit tests for `src/lib` (`node:test`) |
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Environment
+
+| Variable | Needed | Purpose |
+| :-- | :-- | :-- |
+| `VITE_TURNSTILE_SITE_KEY` | Yes | Turnstile **site** key (public). The Analyze button is disabled without it. |
+| `VITE_API_URL` | Production | API origin, e.g. `https://your-api.onrender.com`. Set it on your hosting platform. |
+
+## Layout
+
+- `src/App.jsx`: state and screen switching (landing, loading, dashboard)
+- `src/components/`: UI pieces (Landing, Dashboard, CommentFeed, Charts, Icons, ...)
+- `src/hooks/`: small effects (counter animation, text scramble, visit counter, cursor glow)
+- `src/lib/`: `api.js` (server calls), `stats.js` (chart numbers), `samples.js` (example videos, ticker text)

@@ -1,106 +1,59 @@
-const supabase = require('../utils/supabase');
+// DEMO DATA ONLY. Inserts one clearly fake record under the id "demo_seed" (never a real video id),
+// so it can never be served as the cached analysis of a real YouTube video.
+// Usage: npm run seed -- --yes     (refuses to run when NODE_ENV=production)
+require('dotenv').config({ path: process.env.DOTENV_CONFIG_PATH });
+const { createSupabase } = require('../utils/supabase');
+
+const DEMO_ID = 'demo_seed';
 
 const mockVideo = {
-  id: 'dQw4w9WgXcQ',
-  title: 'Rick Astley - Never Gonna Give You Up (Official Music Video)',
-  channel_title: 'Rick Astley',
+  id: DEMO_ID,
+  title: 'DEMO: sample analysis (not a real video)',
+  channel_title: 'Demo channel',
   thumbnail: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
-  published_at: new Date('1987-07-27').toISOString(),
-  summary: `### 📊 Audience Sentiment & Feedback Summary
+  published_at: new Date('2026-01-01').toISOString(),
+  summary: `### Audience Sentiment & Feedback Summary
 
-* **General Consensus:** The comment section is overwhelmingly positive, filled with nostalgia, humorous memes, and respect for this legendary track. It represents one of the most united and wholesome spaces on the internet.
+* **General Consensus:** Sample text used to preview the dashboard. These comments are invented and do not come from a real video.
 * **What They Loved:**
-  - The iconic 80s dance moves and synth-pop instrumentation.
-  - The wholesomeness of the "Rickroll" meme culture.
-  - Rick Astley's incredible deep voice.
+  - Sample praise comment.
+  - Sample enthusiasm comment.
 * **Critiques & Suggestions:**
-  - Nostalgic users wishing music was still made like this.
-  - Users jokingly complaining that they were tricked into opening the video again.`
+  - Sample question comment.
+  - Sample feedback comment.`,
 };
 
+const demoComment = (n, author, text, likes, sentiment, category) => ({
+  id: `demo_c${n}`,
+  video_id: DEMO_ID,
+  author_name: author,
+  author_profile_image: null,
+  text,
+  like_count: likes,
+  published_at: new Date('2026-01-01').toISOString(),
+  sentiment,
+  category,
+});
+
 const mockComments = [
-  {
-    id: 'c1',
-    video_id: 'dQw4w9WgXcQ',
-    author_name: 'David Miller',
-    author_profile_image: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80',
-    text: 'Can we all appreciate that this song has literally united the internet for decades? Absolute masterpiece!',
-    like_count: 342,
-    published_at: new Date().toISOString(),
-    sentiment: 'Positive',
-    category: 'Praise'
-  },
-  {
-    id: 'c2',
-    video_id: 'dQw4w9WgXcQ',
-    author_name: 'Sarah Jenkins',
-    author_profile_image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&h=80&q=80',
-    text: 'Is Rick Astley still touring in 2026? I would absolutely love to see him perform this live!',
-    like_count: 57,
-    published_at: new Date().toISOString(),
-    sentiment: 'Neutral',
-    category: 'Question'
-  },
-  {
-    id: 'c3',
-    video_id: 'dQw4w9WgXcQ',
-    author_name: 'SpamBot_99',
-    author_profile_image: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=80&h=80&q=80',
-    text: 'FREE BITCOIN HERE!!! CLICK LINK ON MY PROFILE 💰🔥!!!',
-    like_count: 0,
-    published_at: new Date().toISOString(),
-    sentiment: 'Negative',
-    category: 'Noise'
-  },
-  {
-    id: 'c4',
-    video_id: 'dQw4w9WgXcQ',
-    author_name: 'Alex Rivera',
-    author_profile_image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&h=80&q=80',
-    text: 'The audio mixing on this version sounds a bit bass-heavy compared to the original vinyl release. Anyone else notice this?',
-    like_count: 14,
-    published_at: new Date().toISOString(),
-    sentiment: 'Neutral',
-    category: 'Feedback'
-  },
-  {
-    id: 'c5',
-    video_id: 'dQw4w9WgXcQ',
-    author_name: 'Emily Watson',
-    author_profile_image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=80&h=80&q=80',
-    text: 'I got Rickrolled by a link in my computer science syllabus... I am not even mad, this song is a bop!',
-    like_count: 820,
-    published_at: new Date().toISOString(),
-    sentiment: 'Positive',
-    category: 'Praise'
-  }
+  demoComment(1, 'Demo User A', 'Sample praise: this is a great video, thank you!', 342, 'Positive', 'Praise'),
+  demoComment(2, 'Demo User B', 'Sample question: will there be a follow-up video?', 57, 'Neutral', 'Question'),
+  demoComment(3, 'Demo Spam Bot', 'SAMPLE SPAM: click the link in my profile!!!', 0, 'Negative', 'Noise'),
+  demoComment(4, 'Demo User C', 'Sample feedback: the audio was a little quiet in the middle.', 14, 'Neutral', 'Feedback'),
+  demoComment(5, 'Demo User D', 'Sample praise: I learned a lot from this.', 820, 'Positive', 'Praise'),
 ];
 
 async function seed() {
-  console.log('Starting Supabase database seeding...');
+  if (process.env.NODE_ENV === 'production') throw new Error('Refusing to seed demo data in production.');
+  if (!process.argv.includes('--yes')) throw new Error('This writes demo rows to your database. Re-run with --yes to confirm.');
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) throw new Error('SUPABASE_URL and SUPABASE_KEY are required.');
 
-  try {
-    // Insert Mock Video
-    console.log('Inserting mock video metadata...');
-    const { error: videoErr } = await supabase
-      .from('videos')
-      .upsert([mockVideo]);
-
-    if (videoErr) throw videoErr;
-
-    // Insert Mock Comments
-    console.log('Inserting mock comments...');
-    const { error: commentsErr } = await supabase
-      .from('comments')
-      .upsert(mockComments);
-
-    if (commentsErr) throw commentsErr;
-
-    console.log('Database seeded successfully! You can now test the app with the sample Rick Astley video.');
-  } catch (error) {
-    console.error('Seeding failed:', error.message);
-    console.log('Please ensure your SQL schema has been created in your Supabase SQL Editor first.');
-  }
+  const supabase = createSupabase(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+  const v = await supabase.from('videos').upsert([mockVideo]);
+  if (v.error) throw v.error;
+  const c = await supabase.from('comments').upsert(mockComments);
+  if (c.error) throw c.error;
+  console.log(`Seeded demo record "${DEMO_ID}". View it via GET /api/videos/${DEMO_ID}.`);
 }
 
-seed();
+seed().catch((err) => { console.error('Seeding failed:', err.message); process.exit(1); });
